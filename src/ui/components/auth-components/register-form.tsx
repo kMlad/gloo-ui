@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { Input } from "@/ui/components/ui/input";
+import { PasswordInput } from "@/ui/components/auth-components/password-input";
 import { Link, useNavigate } from "react-router";
 import { supabase } from "@/lib/supabase";
 
@@ -91,10 +92,9 @@ export function RegisterForm({ className, ...props }: React.ComponentProps<"div"
               <FieldLabel htmlFor="password" className="text-xs text-muted-foreground">
                 Password
               </FieldLabel>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 required
                 minLength={6}
                 autoComplete="new-password"

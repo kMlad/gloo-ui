@@ -4,7 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
-import { Input } from "@/ui/components/ui/input";
+import { PasswordInput } from "@/ui/components/auth-components/password-input";
 import { useNavigate } from "react-router";
 import { supabase } from "@/lib/supabase";
 
@@ -51,10 +51,9 @@ export function UpdatePasswordForm({ className, ...props }: React.ComponentProps
               <FieldLabel htmlFor="password" className="text-xs text-muted-foreground">
                 New password
               </FieldLabel>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 required
                 minLength={6}
                 autoComplete="new-password"
@@ -65,10 +64,9 @@ export function UpdatePasswordForm({ className, ...props }: React.ComponentProps
               <FieldLabel htmlFor="confirmPassword" className="text-xs text-muted-foreground">
                 Confirm password
               </FieldLabel>
-              <Input
+              <PasswordInput
                 id="confirmPassword"
                 name="confirmPassword"
-                type="password"
                 required
                 minLength={6}
                 autoComplete="new-password"

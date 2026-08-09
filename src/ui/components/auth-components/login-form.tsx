@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { Input } from "@/ui/components/ui/input";
+import { PasswordInput } from "@/ui/components/auth-components/password-input";
 import { Link, useNavigate } from "react-router";
 import { supabase } from "@/lib/supabase";
 
@@ -70,10 +71,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                   Forgot password?
                 </Link>
               </div>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 required
                 autoComplete="current-password"
                 className="h-9 rounded-lg px-3 text-sm"

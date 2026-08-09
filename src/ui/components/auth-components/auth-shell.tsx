@@ -13,10 +13,6 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
     <div className="dark relative flex min-h-svh w-full items-center justify-center overflow-hidden bg-background p-6 text-foreground md:p-10">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,oklch(1_0_0/3%)_1px,transparent_1px),linear-gradient(to_bottom,oklch(1_0_0/3%)_1px,transparent_1px)] bg-size-[64px_64px] mask-[radial-gradient(ellipse_60%_60%_at_50%_45%,black,transparent)]"
-      />
-      <div
-        aria-hidden
         className="animate-glow-drift pointer-events-none absolute -top-40 left-1/2 h-120 w-180 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,oklch(0.438_0.218_303.724/28%),transparent)] blur-3xl"
       />
       <div
