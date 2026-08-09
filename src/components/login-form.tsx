@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { AlphabetGreekIcon, LayoutBottomIcon } from "@hugeicons/core-free-icons";
+import { AlphabetGreekIcon } from "@hugeicons/core-free-icons";
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   return (
