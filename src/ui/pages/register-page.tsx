@@ -1,5 +1,5 @@
-import { AuthShell } from "@/components/auth-shell";
-import { RegisterForm } from "@/components/register-form";
+import { AuthShell } from "@/ui/components/auth-components/auth-shell";
+import { RegisterForm } from "@/ui/components/auth-components/register-form";
 
 export function RegisterPage() {
   return (
