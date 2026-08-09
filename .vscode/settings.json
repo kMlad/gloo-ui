@@ -1,5 +1,7 @@
 {
   "npm.scriptRunner": "vp",
+  "biome.enabled": false,
+  "css.lint.unknownAtRules": "ignore",
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "[javascript]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"
