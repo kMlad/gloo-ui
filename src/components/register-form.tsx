@@ -6,12 +6,25 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Link } from "react-router";
 
-export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
+export function RegisterForm({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <div className="rounded-2xl border border-border/70 bg-card/60 p-6 shadow-[0_24px_60px_-24px] shadow-black/60 ring-1 ring-white/5 backdrop-blur-xl">
         <form>
           <FieldGroup className="gap-4">
+            <Field>
+              <FieldLabel htmlFor="name" className="text-xs text-muted-foreground">
+                Full name
+              </FieldLabel>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Alex Morrow"
+                required
+                autoComplete="name"
+                className="h-9 rounded-lg px-3 text-sm"
+              />
+            </Field>
             <Field>
               <FieldLabel htmlFor="email" className="text-xs text-muted-foreground">
                 Email
@@ -26,28 +39,20 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               />
             </Field>
             <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="password" className="text-xs text-muted-foreground">
-                  Password
-                </FieldLabel>
-                <Link
-                  to="/forgot-password"
-                  className="text-xs text-muted-foreground/80 underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                >
-                  Forgot password?
-                </Link>
-              </div>
+              <FieldLabel htmlFor="password" className="text-xs text-muted-foreground">
+                Password
+              </FieldLabel>
               <Input
                 id="password"
                 type="password"
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
                 className="h-9 rounded-lg px-3 text-sm"
               />
             </Field>
             <Field className="pt-1">
               <Button type="submit" size="lg" className="h-9 w-full rounded-lg text-sm font-medium">
-                Sign in
+                Create account
               </Button>
             </Field>
           </FieldGroup>
@@ -55,9 +60,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
-        Don&apos;t have an account?{" "}
-        <Link to="/register" className="font-medium text-foreground underline-offset-4 hover:underline">
-          Create one
+        Already have an account?{" "}
+        <Link to="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+          Sign in
         </Link>
       </p>
     </div>

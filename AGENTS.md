@@ -1,1 +1,2 @@
-
+- Always assume there's a dev server running on port 5173. If not, ask the user to run the server, do not ever run a dev server on your own.
+- Never install dependencies on your own. If something needs to be installed, type out the dependency list in a way that's easily copyable by the user. As we're using Vite Plus for dependency management, the command should be `vp add dependency-name`, i.e. `vp add react`

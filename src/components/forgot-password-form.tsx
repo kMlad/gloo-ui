@@ -6,7 +6,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Link } from "react-router";
 
-export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
+export function ForgotPasswordForm({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <div className="rounded-2xl border border-border/70 bg-card/60 p-6 shadow-[0_24px_60px_-24px] shadow-black/60 ring-1 ring-white/5 backdrop-blur-xl">
@@ -25,29 +25,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                 className="h-9 rounded-lg px-3 text-sm"
               />
             </Field>
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="password" className="text-xs text-muted-foreground">
-                  Password
-                </FieldLabel>
-                <Link
-                  to="/forgot-password"
-                  className="text-xs text-muted-foreground/80 underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <Input
-                id="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                className="h-9 rounded-lg px-3 text-sm"
-              />
-            </Field>
             <Field className="pt-1">
               <Button type="submit" size="lg" className="h-9 w-full rounded-lg text-sm font-medium">
-                Sign in
+                Send reset link
               </Button>
             </Field>
           </FieldGroup>
@@ -55,9 +35,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
-        Don&apos;t have an account?{" "}
-        <Link to="/register" className="font-medium text-foreground underline-offset-4 hover:underline">
-          Create one
+        Remembered it after all?{" "}
+        <Link to="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+          Back to sign in
         </Link>
       </p>
     </div>
