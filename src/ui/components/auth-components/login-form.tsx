@@ -93,16 +93,6 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
           </FieldGroup>
         </form>
       </div>
-
-      <p className="text-center text-xs text-muted-foreground">
-        Don&apos;t have an account?{" "}
-        <Link
-          to="/register"
-          className="font-medium text-foreground underline-offset-4 hover:underline"
-        >
-          Create one
-        </Link>
-      </p>
     </div>
   );
 }

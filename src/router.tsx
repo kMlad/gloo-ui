@@ -1,11 +1,12 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { PublicLayout } from "./ui/layouts/public-layout";
 import { ProtectedLayout } from "./ui/layouts/protected-layout";
+import { AdminLayout } from "./ui/layouts/admin-layout";
 import { DashboardPage } from "./ui/pages/dashboard-page";
 import { LoginPage } from "./ui/pages/login-page";
-import { RegisterPage } from "./ui/pages/register-page";
 import { ForgotPasswordPage } from "./ui/pages/forgot-password-page";
 import { UpdatePasswordPage } from "./ui/pages/update-password-page";
+import { InviteUserPage } from "./ui/pages/invite-user-page";
 
 export const router = createBrowserRouter([
   {
@@ -21,7 +22,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "/register",
-        Component: RegisterPage,
+        element: <Navigate to="/login" replace />,
       },
       {
         path: "/forgot-password",
@@ -39,6 +40,15 @@ export const router = createBrowserRouter([
       {
         path: "/update-password",
         Component: UpdatePasswordPage,
+      },
+      {
+        Component: AdminLayout,
+        children: [
+          {
+            path: "/invite-user",
+            Component: InviteUserPage,
+          },
+        ],
       },
     ],
   },

@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Button } from "@/ui/components/ui/button";
+import { buttonVariants } from "@/ui/components/ui/button-variants";
 import { useAuth } from "@/providers/auth-context";
+import { cn } from "@/lib/utils";
 
 export function DashboardPage() {
-  const { claims, signOut } = useAuth();
+  const { claims, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -21,6 +23,11 @@ export function DashboardPage() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-4 bg-background px-6 text-foreground">
       <p className="text-sm text-muted-foreground">Signed in as {claims?.email ?? claims?.sub}</p>
+      {isAdmin ? (
+        <Link to="/invite-user" className={cn(buttonVariants({ variant: "outline" }))}>
+          Invite user
+        </Link>
+      ) : null}
       <Button type="button" variant="outline" disabled={isSigningOut} onClick={handleSignOut}>
         {isSigningOut ? "Signing out…" : "Sign out"}
       </Button>

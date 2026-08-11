@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isAdminRole } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import { AuthContext, type AuthClaims } from "@/providers/auth-context";
 
@@ -42,11 +43,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   }
 
+  const role = claims?.app_metadata?.role ?? null;
+
   return (
     <AuthContext.Provider
       value={{
         claims,
+        role,
         isAuthenticated: claims !== null,
+        isAdmin: isAdminRole(role),
         isLoading,
         signOut,
       }}
