@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { PublicLayout } from "./ui/layouts/public-layout";
 import { ProtectedLayout } from "./ui/layouts/protected-layout";
+import { AppLayout } from "./ui/layouts/app-layout";
 import { AdminLayout } from "./ui/layouts/admin-layout";
 import { DashboardPage } from "./ui/pages/dashboard-page";
 import { LoginPage } from "./ui/pages/login-page";
@@ -34,19 +35,24 @@ export const router = createBrowserRouter([
     Component: ProtectedLayout,
     children: [
       {
-        path: "/dashboard",
-        Component: DashboardPage,
-      },
-      {
         path: "/update-password",
         Component: UpdatePasswordPage,
       },
       {
-        Component: AdminLayout,
+        Component: AppLayout,
         children: [
           {
-            path: "/invite-user",
-            Component: InviteUserPage,
+            path: "/dashboard",
+            Component: DashboardPage,
+          },
+          {
+            Component: AdminLayout,
+            children: [
+              {
+                path: "/invite-user",
+                Component: InviteUserPage,
+              },
+            ],
           },
         ],
       },
