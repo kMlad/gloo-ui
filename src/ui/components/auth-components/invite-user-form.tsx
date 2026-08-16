@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { apiFetch, ApiError } from "@/lib/api";
-import { inviteUserSchema } from "@/lib/invite-user";
+import { inviteUser, inviteUserSchema } from "@/lib/invite-user";
 import { roles } from "@/lib/roles";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
@@ -12,16 +12,18 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 
 export function InviteUserForm({ className, ...props }: React.ComponentProps<"div">) {
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const invite = useMutation({
+    mutationFn: inviteUser,
+  });
 
-  async function handleSubmit(event: React.SubmitEvent<HTMLFormElement>) {
+  function handleSubmit(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
-    setMessage(null);
+    setValidationError(null);
+    invite.reset();
 
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     const emailValue = formData.get("email");
     const roleValue = formData.get("role");
     const email = typeof emailValue === "string" ? emailValue.trim() : "";
@@ -30,31 +32,22 @@ export function InviteUserForm({ className, ...props }: React.ComponentProps<"di
     const parsed = inviteUserSchema.safeParse({ email, role });
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0];
-      setError(firstIssue?.message ?? "Invalid invite details");
+      setValidationError(firstIssue?.message ?? "Invalid invite details");
       return;
     }
 
-    setIsSubmitting(true);
-
-    try {
-      await apiFetch("/auth/users/invite", {
-        method: "POST",
-        body: JSON.stringify(parsed.data),
-      });
-      setMessage(`Invite sent to ${parsed.data.email}.`);
-      event.currentTarget.reset();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to send invite");
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+    invite.mutate(parsed.data, {
+      onSuccess: () => {
+        form.reset();
+      },
+    });
   }
+
+  const error =
+    validationError ??
+    (invite.error instanceof Error ? invite.error.message : invite.isError ? "Failed to send invite" : null);
+  const message =
+    invite.isSuccess && invite.variables ? `Invite sent to ${invite.variables.email}.` : null;
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -109,10 +102,10 @@ export function InviteUserForm({ className, ...props }: React.ComponentProps<"di
               <Button
                 type="submit"
                 size="lg"
-                disabled={isSubmitting}
+                disabled={invite.isPending}
                 className="h-9 w-full rounded-lg text-sm font-medium"
               >
-                {isSubmitting ? "Sending…" : "Send invite"}
+                {invite.isPending ? "Sending…" : "Send invite"}
               </Button>
             </Field>
           </FieldGroup>
