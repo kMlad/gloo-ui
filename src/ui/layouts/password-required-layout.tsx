@@ -1,8 +1,8 @@
 import { Navigate, Outlet } from "react-router";
 import { useAuth } from "@/providers/auth-context";
 
-export function AdminLayout() {
-  const { isAdmin, isLoading } = useAuth();
+export function PasswordRequiredLayout() {
+  const { mustSetPassword, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -12,8 +12,8 @@ export function AdminLayout() {
     );
   }
 
-  if (!isAdmin) {
-    return <Navigate to="/dashboard" replace />;
+  if (mustSetPassword) {
+    return <Navigate to="/update-password" replace />;
   }
 
   return <Outlet />;

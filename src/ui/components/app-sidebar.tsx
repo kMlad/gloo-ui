@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/ui/components/ui/sidebar"
+import { canInvite } from "@/lib/roles"
 import { useAuth } from "@/providers/auth-context"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
@@ -22,7 +23,7 @@ import {
 } from "@hugeicons/core-free-icons"
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
-  const { claims, isAdmin, signOut } = useAuth()
+  const { claims, role, signOut } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [isSigningOut, setIsSigningOut] = useState(false)
@@ -32,7 +33,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 
   const navItems = [
     { title: "Dashboard", url: "/dashboard", icon: DashboardSquare01Icon },
-    ...(isAdmin ? [{ title: "Invite user", url: "/invite-user", icon: UserAdd01Icon }] : []),
+    ...(canInvite(role) ? [{ title: "Invite user", url: "/invite-user", icon: UserAdd01Icon }] : []),
   ]
 
   async function handleSignOut() {

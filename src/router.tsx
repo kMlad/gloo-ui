@@ -1,8 +1,9 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { PublicLayout } from "./ui/layouts/public-layout";
 import { ProtectedLayout } from "./ui/layouts/protected-layout";
+import { PasswordRequiredLayout } from "./ui/layouts/password-required-layout";
 import { AppLayout } from "./ui/layouts/app-layout";
-import { AdminLayout } from "./ui/layouts/admin-layout";
+import { InviteLayout } from "./ui/layouts/invite-layout";
 import { DashboardPage } from "./ui/pages/dashboard-page";
 import { LoginPage } from "./ui/pages/login-page";
 import { ForgotPasswordPage } from "./ui/pages/forgot-password-page";
@@ -39,18 +40,23 @@ export const router = createBrowserRouter([
         Component: UpdatePasswordPage,
       },
       {
-        Component: AppLayout,
+        Component: PasswordRequiredLayout,
         children: [
           {
-            path: "/dashboard",
-            Component: DashboardPage,
-          },
-          {
-            Component: AdminLayout,
+            Component: AppLayout,
             children: [
               {
-                path: "/invite-user",
-                Component: InviteUserPage,
+                path: "/dashboard",
+                Component: DashboardPage,
+              },
+              {
+                Component: InviteLayout,
+                children: [
+                  {
+                    path: "/invite-user",
+                    Component: InviteUserPage,
+                  },
+                ],
               },
             ],
           },

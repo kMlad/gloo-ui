@@ -1,11 +1,24 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { isAdminRole } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import { AuthContext, type AuthClaims } from "@/providers/auth-context";
 
+function hasPasswordAmr(claims: AuthClaims | null) {
+  return claims?.amr?.some((entry) => entry.method === "password") ?? false;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [claims, setClaims] = useState<AuthClaims | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const refreshClaims = useCallback(async () => {
+    const { data } = await supabase.auth.getClaims();
+    flushSync(() => {
+      setClaims((data?.claims as AuthClaims | undefined) ?? null);
+      setIsLoading(false);
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,15 +57,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const role = claims?.app_metadata?.role ?? null;
+  const isAuthenticated = claims !== null;
 
   return (
     <AuthContext.Provider
       value={{
         claims,
         role,
-        isAuthenticated: claims !== null,
+        isAuthenticated,
         isAdmin: isAdminRole(role),
+        mustSetPassword: isAuthenticated && !hasPasswordAmr(claims),
         isLoading,
+        refreshClaims,
         signOut,
       }}
     >

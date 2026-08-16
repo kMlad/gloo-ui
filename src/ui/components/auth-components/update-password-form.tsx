@@ -7,9 +7,18 @@ import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { PasswordInput } from "@/ui/components/auth-components/password-input";
 import { useNavigate } from "react-router";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/providers/auth-context";
+
+function isSamePasswordError(error: { code?: string; message: string }) {
+  return (
+    error.code === "same_password" ||
+    error.message.toLowerCase().includes("different from the old password")
+  );
+}
 
 export function UpdatePasswordForm({ className, ...props }: React.ComponentProps<"div">) {
   const navigate = useNavigate();
+  const { claims, refreshClaims } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,13 +41,37 @@ export function UpdatePasswordForm({ className, ...props }: React.ComponentProps
 
     const { error: updateError } = await supabase.auth.updateUser({ password });
 
-    setIsSubmitting(false);
-
-    if (updateError) {
+    if (updateError && !isSamePasswordError(updateError)) {
+      setIsSubmitting(false);
       setError(updateError.message);
       return;
     }
 
+    let email = claims?.email;
+    if (!email) {
+      const { data } = await supabase.auth.getUser();
+      email = data.user?.email ?? undefined;
+    }
+
+    if (!email) {
+      setIsSubmitting(false);
+      setError("Could not determine your email. Try the invite or reset link again.");
+      return;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError) {
+      setIsSubmitting(false);
+      setError(signInError.message);
+      return;
+    }
+
+    await refreshClaims();
+    setIsSubmitting(false);
     void navigate("/dashboard", { replace: true });
   }
 

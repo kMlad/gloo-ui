@@ -1,8 +1,9 @@
 import { Navigate, Outlet } from "react-router";
+import { canInvite } from "@/lib/roles";
 import { useAuth } from "@/providers/auth-context";
 
-export function PublicLayout() {
-  const { isAuthenticated, isLoading, mustSetPassword } = useAuth();
+export function InviteLayout() {
+  const { role, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -12,8 +13,8 @@ export function PublicLayout() {
     );
   }
 
-  if (isAuthenticated) {
-    return <Navigate to={mustSetPassword ? "/update-password" : "/dashboard"} replace />;
+  if (!canInvite(role)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Outlet />;

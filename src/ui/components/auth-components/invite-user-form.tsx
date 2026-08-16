@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { inviteUser, inviteUserSchema } from "@/lib/invite-user";
-import { roles } from "@/lib/roles";
+import { getInvitableRoles } from "@/lib/roles";
+import { useAuth } from "@/providers/auth-context";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { Input } from "@/ui/components/ui/input";
@@ -12,6 +13,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 
 export function InviteUserForm({ className, ...props }: React.ComponentProps<"div">) {
+  const { role: inviterRole } = useAuth();
+  const invitableRoles = getInvitableRoles(inviterRole);
   const [validationError, setValidationError] = useState<string | null>(null);
   const invite = useMutation({
     mutationFn: inviteUser,
@@ -33,6 +36,11 @@ export function InviteUserForm({ className, ...props }: React.ComponentProps<"di
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0];
       setValidationError(firstIssue?.message ?? "Invalid invite details");
+      return;
+    }
+
+    if (!invitableRoles.some((entry) => entry.id === parsed.data.role)) {
+      setValidationError("You do not have permission to invite this role");
       return;
     }
 
@@ -83,7 +91,7 @@ export function InviteUserForm({ className, ...props }: React.ComponentProps<"di
                   <option value="" disabled>
                     Select a role
                   </option>
-                  {roles.map((role) => (
+                  {invitableRoles.map((role) => (
                     <option key={role.id} value={role.id}>
                       {role.label}
                     </option>
