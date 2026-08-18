@@ -15,7 +15,9 @@ import {
 } from "@/lib/tables";
 import { AddColumnDialog } from "@/ui/components/tables/add-column-dialog";
 import { ConfirmDeleteDialog } from "@/ui/components/tables/confirm-delete-dialog";
+import { HiddenColumnsMenu } from "@/ui/components/tables/hidden-columns-menu";
 import { TableDataGrid } from "@/ui/components/tables/table-data-grid";
+import { TableFilterBar } from "@/ui/components/tables/table-filter-bar";
 import { Button } from "@/ui/components/ui/button";
 import { Input } from "@/ui/components/ui/input";
 import { Skeleton } from "@/ui/components/ui/skeleton";
@@ -111,7 +113,9 @@ export function TableDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             {table
-              ? `${table.columns.length} columns · ${total} rows`
+              ? `${table.columns.filter((column) => !column.hidden).length} columns · ${total} rows${
+                  table.filters.length > 0 ? " (filtered)" : ""
+                }`
               : "Loading schema and rows."}
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -137,6 +141,18 @@ export function TableDetailPage() {
       {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
       {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
 
+      {table && table.columns.length > 0 ? (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <TableFilterBar
+            tableId={table.id}
+            columns={table.columns}
+            filters={table.filters}
+            onFiltersSaved={() => setPagination((current) => ({ ...current, pageIndex: 0 }))}
+          />
+          <HiddenColumnsMenu tableId={table.id} columns={table.columns} />
+        </div>
+      ) : null}
+
       {tableQuery.isPending || rowsQuery.isPending ? (
         <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card p-4">
           <Skeleton className="h-8 w-full" />
@@ -155,6 +171,7 @@ export function TableDetailPage() {
           rows={rows}
           total={total}
           pagination={pagination}
+          filterActive={table.filters.length > 0}
           onPaginationChange={setPagination}
         />
       ) : null}

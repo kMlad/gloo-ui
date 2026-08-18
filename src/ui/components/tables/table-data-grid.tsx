@@ -1,14 +1,19 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper, useTable, type PaginationState } from "@tanstack/react-table";
 import {
   deleteColumn,
   deleteRow,
   mutationErrorMessage,
+  reorderColumns,
+  reorderVisibleColumns,
   tableKeys,
+  updateColumn,
   updateRow,
+  visibleColumns,
   type ColumnResponse,
   type RowResponse,
+  type TableResponse,
 } from "@/lib/tables";
 import { tableGridFeatures, type TableGridFeatures } from "@/ui/components/tables/data-table-features";
 import { BooleanCell, EditableTextCell } from "@/ui/components/tables/editable-cell";
@@ -19,6 +24,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/components/ui/dropdown-menu";
 import {
@@ -29,15 +35,36 @@ import {
   TableHeader,
   TableRow,
 } from "@/ui/components/ui/table";
+import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowDown01Icon,
   ArrowUp01Icon,
   ArrowUpDownIcon,
+  GripVerticalIcon,
   MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons";
 
 const columnHelper = createColumnHelper<TableGridFeatures, RowResponse>();
+
+function clearColumnDropTargets(from: EventTarget | null) {
+  const headerRow = from instanceof Element ? from.closest("tr") : null;
+  headerRow?.querySelectorAll("[data-column-head]").forEach((node) => {
+    if (node instanceof HTMLElement) {
+      delete node.dataset.dropTarget;
+    }
+  });
+}
+
+function clearColumnDragMarks(from: EventTarget | null) {
+  const headerRow = from instanceof Element ? from.closest("tr") : null;
+  headerRow?.querySelectorAll("[data-column-head]").forEach((node) => {
+    if (node instanceof HTMLElement) {
+      delete node.dataset.dragging;
+      delete node.dataset.dropTarget;
+    }
+  });
+}
 
 type TableDataGridProps = {
   tableId: string;
@@ -45,6 +72,7 @@ type TableDataGridProps = {
   rows: RowResponse[];
   total: number;
   pagination: PaginationState;
+  filterActive?: boolean;
   onPaginationChange: (updater: PaginationState | ((old: PaginationState) => PaginationState)) => void;
 };
 
@@ -54,12 +82,16 @@ export function TableDataGrid({
   rows,
   total,
   pagination,
+  filterActive = false,
   onPaginationChange,
 }: TableDataGridProps) {
   const queryClient = useQueryClient();
   const [renameColumn, setRenameColumn] = useState<ColumnResponse | null>(null);
   const [deleteColumnTarget, setDeleteColumnTarget] = useState<ColumnResponse | null>(null);
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
+  const draggingIdRef = useRef<string | null>(null);
+  const columnsRef = useRef(schemaColumns);
+  columnsRef.current = schemaColumns;
 
   const saveCell = useMutation({
     mutationFn: ({ rowId, columnId, value }: { rowId: string; columnId: string; value: string | boolean | null }) =>
@@ -87,19 +119,74 @@ export function TableDataGrid({
     },
   });
 
-  const orderedColumns = useMemo(
-    () => [...schemaColumns].sort((a, b) => a.position - b.position),
-    [schemaColumns],
-  );
+  const hideColumn = useMutation({
+    mutationFn: (columnId: string) => updateColumn(tableId, columnId, { hidden: true }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId) });
+    },
+  });
+
+  const moveColumns = useMutation({
+    mutationFn: (columnIds: string[]) => reorderColumns(tableId, columnIds),
+    onMutate: async (columnIds) => {
+      await queryClient.cancelQueries({ queryKey: tableKeys.detail(tableId) });
+      const previous = queryClient.getQueryData<TableResponse>(tableKeys.detail(tableId));
+      if (previous) {
+        const byId = new Map(previous.columns.map((column) => [column.id, column]));
+        queryClient.setQueryData<TableResponse>(tableKeys.detail(tableId), {
+          ...previous,
+          columns: columnIds.flatMap((columnId, position) => {
+            const column = byId.get(columnId);
+            return column ? [{ ...column, position }] : [];
+          }),
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _columnIds, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(tableKeys.detail(tableId), context.previous);
+      }
+    },
+    onSuccess: (table) => {
+      queryClient.setQueryData(tableKeys.detail(tableId), table);
+    },
+  });
+
+  const displayColumns = useMemo(() => visibleColumns(schemaColumns), [schemaColumns]);
+  const canHideColumn = displayColumns.length > 1;
+  const canReorder = displayColumns.length > 1;
 
   const tableColumns = useMemo(
     () =>
       columnHelper.columns([
-        ...orderedColumns.map((column) =>
+        ...displayColumns.map((column) =>
           columnHelper.accessor((row) => row.values[column.id] ?? null, {
             id: column.id,
             header: () => (
               <div className="flex items-center gap-1">
+                {canReorder ? (
+                  <span
+                    draggable
+                    aria-label={`Reorder ${column.name}`}
+                    className="inline-flex cursor-grab touch-none select-none text-muted-foreground [&_svg]:pointer-events-none active:cursor-grabbing"
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData("text/plain", column.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      draggingIdRef.current = column.id;
+                      const headerCell = event.currentTarget.closest("[data-column-head]");
+                      if (headerCell instanceof HTMLElement) {
+                        headerCell.dataset.dragging = "true";
+                      }
+                    }}
+                    onDragEnd={(event) => {
+                      draggingIdRef.current = null;
+                      clearColumnDragMarks(event.currentTarget);
+                    }}
+                  >
+                    <HugeiconsIcon icon={GripVerticalIcon} strokeWidth={2} className="size-3.5" />
+                  </span>
+                ) : null}
                 <span>{column.name}</span>
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -111,6 +198,13 @@ export function TableDataGrid({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     <DropdownMenuItem onClick={() => setRenameColumn(column)}>Rename</DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={!canHideColumn || hideColumn.isPending}
+                      onClick={() => hideColumn.mutate(column.id)}
+                    >
+                      Hide
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" onClick={() => setDeleteColumnTarget(column)}>
                       Delete
                     </DropdownMenuItem>
@@ -159,7 +253,7 @@ export function TableDataGrid({
           ),
         }),
       ]),
-    [orderedColumns, saveCell],
+    [canHideColumn, canReorder, displayColumns, hideColumn, saveCell],
   );
 
   const table = useTable({
@@ -178,6 +272,15 @@ export function TableDataGrid({
   const showingFrom = total === 0 ? 0 : pageIndex * pagination.pageSize + 1;
   const showingTo = Math.min(total, (pageIndex + 1) * pagination.pageSize);
 
+  if (displayColumns.length === 0) {
+    return (
+      <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/30 p-8">
+        <p className="text-sm font-medium text-foreground">All columns are hidden</p>
+        <p className="text-sm text-muted-foreground">Show a column to see the grid again.</p>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
@@ -188,8 +291,56 @@ export function TableDataGrid({
                 {headerGroup.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   const sorted = header.column.getIsSorted();
+                  const isColumnHeader = header.id !== "row-actions";
                   return (
-                    <TableHead key={header.id}>
+                    <TableHead
+                      key={header.id}
+                      data-column-head={isColumnHeader ? header.id : undefined}
+                      className={cn(
+                        isColumnHeader &&
+                          "data-[dragging=true]:opacity-50 data-[drop-target=true]:shadow-[inset_2px_0_0_0_currentColor]",
+                      )}
+                      onDragOver={
+                        isColumnHeader
+                          ? (event) => {
+                              event.preventDefault();
+                              event.dataTransfer.dropEffect = "move";
+                              const sourceId = draggingIdRef.current;
+                              if (!sourceId || sourceId === header.id) {
+                                return;
+                              }
+                              const headerCell = event.currentTarget;
+                              if (headerCell.dataset.dropTarget === "true") {
+                                return;
+                              }
+                              clearColumnDropTargets(headerCell);
+                              headerCell.dataset.dropTarget = "true";
+                            }
+                          : undefined
+                      }
+                      onDrop={
+                        isColumnHeader
+                          ? (event) => {
+                              event.preventDefault();
+                              const sourceId =
+                                event.dataTransfer.getData("text/plain") || draggingIdRef.current;
+                              draggingIdRef.current = null;
+                              clearColumnDragMarks(event.currentTarget);
+                              if (!sourceId) {
+                                return;
+                              }
+                              const nextIds = reorderVisibleColumns(
+                                columnsRef.current,
+                                sourceId,
+                                header.id,
+                              );
+                              if (nextIds) {
+                                moveColumns.mutate(nextIds);
+                              }
+                            }
+                          : undefined
+                      }
+                    >
                       {header.isPlaceholder ? null : (
                         <div className="flex items-center gap-1">
                           {canSort ? (
@@ -235,7 +386,9 @@ export function TableDataGrid({
             ) : (
               <TableRow>
                 <TableCell colSpan={tableColumns.length} className="h-24 text-center text-muted-foreground">
-                  No rows yet. Add a row to get started.
+                  {filterActive
+                    ? "No rows match the current filters."
+                    : "No rows yet. Add a row to get started."}
                 </TableCell>
               </TableRow>
             )}
@@ -243,9 +396,23 @@ export function TableDataGrid({
         </Table>
       </div>
 
+      {moveColumns.error || hideColumn.error ? (
+        <p className="text-sm text-destructive">
+          {mutationErrorMessage(
+            moveColumns.error,
+            moveColumns.isError ? "Failed to reorder columns" : "",
+          ) ||
+            mutationErrorMessage(hideColumn.error, hideColumn.isError ? "Failed to hide column" : "")}
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          {total === 0 ? "0 rows" : `${showingFrom}–${showingTo} of ${total} rows`}
+          {total === 0
+            ? filterActive
+              ? "0 rows match filters"
+              : "0 rows"
+            : `${showingFrom}–${showingTo} of ${total} rows${filterActive ? " (filtered)" : ""}`}
         </p>
         <div className="flex items-center gap-2">
           <Button
