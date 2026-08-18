@@ -32,14 +32,39 @@ async function getAccessToken(): Promise<string> {
   return accessToken;
 }
 
+function messageFromDetail(detail: unknown): string | null {
+  if (typeof detail === "string" && detail.length > 0) {
+    return detail;
+  }
+  if (!Array.isArray(detail)) {
+    return null;
+  }
+
+  const parts = detail.flatMap((item) => {
+    if (typeof item === "string" && item.length > 0) {
+      return [item];
+    }
+    if (typeof item === "object" && item !== null && "msg" in item) {
+      const message = (item as { msg: unknown }).msg;
+      if (typeof message === "string" && message.length > 0) {
+        return [message];
+      }
+    }
+    return [];
+  });
+
+  return parts.length > 0 ? parts.join("; ") : null;
+}
+
 function messageFromBody(body: unknown, fallback: string): string {
   if (typeof body === "object" && body !== null) {
     const record = body as Record<string, unknown>;
     if (typeof record.message === "string" && record.message.length > 0) {
       return record.message;
     }
-    if (typeof record.detail === "string" && record.detail.length > 0) {
-      return record.detail;
+    const detailMessage = messageFromDetail(record.detail);
+    if (detailMessage) {
+      return detailMessage;
     }
     if (typeof record.error === "string" && record.error.length > 0) {
       return record.error;
@@ -53,7 +78,8 @@ export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${accessToken}`);
 
-  if (init.body !== undefined && !headers.has("Content-Type")) {
+  const isFormData = init.body instanceof FormData;
+  if (init.body !== undefined && !isFormData && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 

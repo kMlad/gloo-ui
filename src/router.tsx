@@ -9,6 +9,8 @@ import { LoginPage } from "./ui/pages/login-page";
 import { ForgotPasswordPage } from "./ui/pages/forgot-password-page";
 import { UpdatePasswordPage } from "./ui/pages/update-password-page";
 import { InviteUserPage } from "./ui/pages/invite-user-page";
+import { TablesPage } from "./ui/pages/tables-page";
+import { TableDetailPage } from "./ui/pages/table-detail-page";
 
 export const router = createBrowserRouter([
   {
@@ -48,6 +50,14 @@ export const router = createBrowserRouter([
               {
                 path: "/dashboard",
                 Component: DashboardPage,
+              },
+              {
+                path: "/tables",
+                Component: TablesPage,
+              },
+              {
+                path: "/tables/:tableId",
+                Component: TableDetailPage,
               },
               {
                 Component: InviteLayout,

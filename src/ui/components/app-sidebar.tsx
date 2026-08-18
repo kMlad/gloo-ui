@@ -19,6 +19,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   AlphabetGreekIcon,
   DashboardSquare01Icon,
+  GridTableIcon,
   UserAdd01Icon,
 } from "@hugeicons/core-free-icons"
 
@@ -33,6 +34,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 
   const navItems = [
     { title: "Dashboard", url: "/dashboard", icon: DashboardSquare01Icon },
+    { title: "Tables", url: "/tables", icon: GridTableIcon },
     ...(canInvite(role) ? [{ title: "Invite user", url: "/invite-user", icon: UserAdd01Icon }] : []),
   ]
 
