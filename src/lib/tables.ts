@@ -4,29 +4,29 @@ import { apiFetch } from "@/lib/api";
 export const primitiveColumnTypeSchema = z.enum(["text", "boolean"]);
 export type PrimitiveColumnType = z.infer<typeof primitiveColumnTypeSchema>;
 
-export const columnTypeSchema = z.enum(["text", "boolean", "claygent"]);
+export const columnTypeSchema = z.enum(["text", "boolean", "sheriff"]);
 export type ColumnType = z.infer<typeof columnTypeSchema>;
 
 const columnNameSchema = z.string().trim().min(1, "Column name is required").max(200);
 
-export const claygentOutputKeySchema = z
+export const sheriffOutputKeySchema = z
   .string()
   .trim()
   .min(1, "Output key is required")
   .max(64)
   .regex(/^[a-z][a-z0-9_]*$/, "Use lowercase snake_case, e.g. first_name");
 
-export const claygentOutputFieldSchema = z.object({
-  key: claygentOutputKeySchema,
+export const sheriffOutputFieldSchema = z.object({
+  key: sheriffOutputKeySchema,
   type: primitiveColumnTypeSchema,
 });
-export type ClaygentOutputField = z.infer<typeof claygentOutputFieldSchema>;
+export type SheriffOutputField = z.infer<typeof sheriffOutputFieldSchema>;
 
-export const claygentConfigSchema = z
+export const sheriffConfigSchema = z
   .object({
     user_prompt: z.string().trim().min(1, "Prompt is required").max(8000),
     enhanced_prompt: z.string().trim().max(16_000).nullish(),
-    outputs: z.array(claygentOutputFieldSchema).min(1, "Add at least one output").max(10),
+    outputs: z.array(sheriffOutputFieldSchema).min(1, "Add at least one output").max(10),
   })
   .refine(
     (config) => {
@@ -35,96 +35,96 @@ export const claygentConfigSchema = z
     },
     { message: "Output keys must be unique", path: ["outputs"] },
   );
-export type ClaygentConfig = z.infer<typeof claygentConfigSchema>;
+export type SheriffConfig = z.infer<typeof sheriffConfigSchema>;
 
 export const primitiveColumnCreateSchema = z.object({
   name: columnNameSchema,
   type: primitiveColumnTypeSchema,
 });
 
-export const claygentColumnCreateSchema = z.object({
+export const sheriffColumnCreateSchema = z.object({
   name: columnNameSchema,
-  type: z.literal("claygent"),
-  claygent: claygentConfigSchema,
+  type: z.literal("sheriff"),
+  sheriff: sheriffConfigSchema,
 });
 
 export const columnCreateSchema = z.discriminatedUnion("type", [
   primitiveColumnCreateSchema,
-  claygentColumnCreateSchema,
+  sheriffColumnCreateSchema,
 ]);
 export type ColumnCreate = z.infer<typeof columnCreateSchema>;
 
-export const claygentExpandRequestSchema = z.object({
+export const sheriffExpandRequestSchema = z.object({
   goal: z.string().trim().min(1, "Prompt is required").max(8000),
   column_ids: z.array(z.string().uuid()).optional(),
 });
-export type ClaygentExpandRequest = z.infer<typeof claygentExpandRequestSchema>;
+export type SheriffExpandRequest = z.infer<typeof sheriffExpandRequestSchema>;
 
-export type ClaygentInputColumn = {
+export type SheriffInputColumn = {
   id: string;
   name: string;
 };
 
-export type ClaygentExpandResponse = {
+export type SheriffExpandResponse = {
   user_prompt: string;
   enhanced_prompt: string;
-  outputs: ClaygentOutputField[];
-  input_columns: ClaygentInputColumn[];
+  outputs: SheriffOutputField[];
+  input_columns: SheriffInputColumn[];
 };
 
-export const claygentCellStatusSchema = z.enum(["queued", "running", "succeeded", "failed"]);
-export type ClaygentCellStatus = z.infer<typeof claygentCellStatusSchema>;
+export const sheriffCellStatusSchema = z.enum(["queued", "running", "succeeded", "failed"]);
+export type SheriffCellStatus = z.infer<typeof sheriffCellStatusSchema>;
 
-export const claygentConfidenceSchema = z.enum(["high", "medium", "low"]);
-export type ClaygentConfidence = z.infer<typeof claygentConfidenceSchema>;
+export const sheriffConfidenceSchema = z.enum(["high", "medium", "low"]);
+export type SheriffConfidence = z.infer<typeof sheriffConfidenceSchema>;
 
-export const claygentSourceSchema = z.object({
+export const sheriffSourceSchema = z.object({
   url: z.string(),
   title: z.string().optional().default(""),
 });
-export type ClaygentSource = z.infer<typeof claygentSourceSchema>;
+export type SheriffSource = z.infer<typeof sheriffSourceSchema>;
 
-export const claygentCellSchema = z.object({
-  status: claygentCellStatusSchema,
-  confidence: claygentConfidenceSchema.nullish(),
+export const sheriffCellSchema = z.object({
+  status: sheriffCellStatusSchema,
+  confidence: sheriffConfidenceSchema.nullish(),
   confidence_reason: z.string().nullish(),
-  sources: z.array(claygentSourceSchema).optional().default([]),
+  sources: z.array(sheriffSourceSchema).optional().default([]),
   output: z.record(z.string(), z.unknown()).nullish(),
   error: z.string().nullish(),
 });
-export type ClaygentCell = z.infer<typeof claygentCellSchema>;
+export type SheriffCell = z.infer<typeof sheriffCellSchema>;
 
-export type ClaygentRunCreate = {
+export type SheriffRunCreate = {
   row_ids?: string[];
   overwrite?: boolean;
 };
 
-export type ClaygentRunStatus = "queued" | "running" | "succeeded" | "partial" | "failed";
-export type ClaygentRunItemStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
+export type SheriffRunStatus = "queued" | "running" | "succeeded" | "partial" | "failed";
+export type SheriffRunItemStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
 
-export type ClaygentRunItemResponse = {
+export type SheriffRunItemResponse = {
   id: string;
   row_id: string;
-  status: ClaygentRunItemStatus;
+  status: SheriffRunItemStatus;
   error_message: string | null;
   model_response: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
 
-export type ClaygentRunResponse = {
+export type SheriffRunResponse = {
   id: string;
   table_id: string;
   column_id: string;
   created_by: string;
-  status: ClaygentRunStatus;
+  status: SheriffRunStatus;
   row_ids: string[] | null;
   overwrite: boolean;
   total_count: number;
   succeeded_count: number;
   failed_count: number;
   skipped_count: number;
-  items: ClaygentRunItemResponse[];
+  items: SheriffRunItemResponse[];
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -295,15 +295,15 @@ export function isTableResponse(value: ColumnResponse | TableResponse): value is
   return "columns" in value && Array.isArray(value.columns);
 }
 
-export function expandClaygentPrompt(tableId: string, input: ClaygentExpandRequest) {
-  return apiFetch<ClaygentExpandResponse>(`/tables/${tableId}/claygent/prompts/expand`, {
+export function expandSheriffPrompt(tableId: string, input: SheriffExpandRequest) {
+  return apiFetch<SheriffExpandResponse>(`/tables/${tableId}/sheriff/prompts/expand`, {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
-export function startClaygentRun(tableId: string, columnId: string, input: ClaygentRunCreate = {}) {
-  return apiFetch<ClaygentRunResponse>(`/tables/${tableId}/columns/${columnId}/runs`, {
+export function startSheriffRun(tableId: string, columnId: string, input: SheriffRunCreate = {}) {
+  return apiFetch<SheriffRunResponse>(`/tables/${tableId}/columns/${columnId}/runs`, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -472,39 +472,39 @@ export function buildTableFilter(input: {
   };
 }
 
-export function parseClaygentCell(value: CellValue | undefined): ClaygentCell | null {
+export function parseSheriffCell(value: CellValue | undefined): SheriffCell | null {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
-  const parsed = claygentCellSchema.safeParse(value);
+  const parsed = sheriffCellSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
-export function claygentCellIsActive(value: CellValue | undefined): boolean {
-  const status = parseClaygentCell(value)?.status;
+export function sheriffCellIsActive(value: CellValue | undefined): boolean {
+  const status = parseSheriffCell(value)?.status;
   return status === "queued" || status === "running";
 }
 
-export function claygentInFlightStatus(
+export function sheriffInFlightStatus(
   value: CellValue | undefined,
   pending = false,
 ): "queued" | "running" | null {
   if (pending) {
     return "queued";
   }
-  const status = parseClaygentCell(value)?.status;
+  const status = parseSheriffCell(value)?.status;
   if (status === "queued" || status === "running") {
     return status;
   }
   return null;
 }
 
-export function rowsHaveActiveClaygent(rows: RowResponse[], columns: ColumnResponse[]): boolean {
-  const claygentIds = columns.filter((column) => column.type === "claygent").map((column) => column.id);
-  if (claygentIds.length === 0) {
+export function rowsHaveActiveSheriff(rows: RowResponse[], columns: ColumnResponse[]): boolean {
+  const sheriffIds = columns.filter((column) => column.type === "sheriff").map((column) => column.id);
+  if (sheriffIds.length === 0) {
     return false;
   }
-  return rows.some((row) => claygentIds.some((columnId) => claygentCellIsActive(row.values[columnId])));
+  return rows.some((row) => sheriffIds.some((columnId) => sheriffCellIsActive(row.values[columnId])));
 }
 
 export function orderedColumns(columns: ColumnResponse[]): ColumnResponse[] {

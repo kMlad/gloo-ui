@@ -1,14 +1,14 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper, useTable, type PaginationState } from "@tanstack/react-table";
 import {
-  claygentInFlightStatus,
+  sheriffInFlightStatus,
   deleteColumn,
   deleteRow,
   mutationErrorMessage,
   reorderColumns,
   reorderVisibleColumns,
-  startClaygentRun,
+  startSheriffRun,
   tableKeys,
   updateColumn,
   updateRow,
@@ -19,11 +19,17 @@ import {
 } from "@/lib/tables";
 import { tableGridFeatures, type TableGridFeatures } from "@/ui/components/tables/data-table-features";
 import { BooleanCell, EditableTextCell } from "@/ui/components/tables/editable-cell";
-import { ClaygentCell } from "@/ui/components/tables/claygent-cell";
-import { ClaygentRunDrawer } from "@/ui/components/tables/claygent-run-drawer";
+import { SheriffCell } from "@/ui/components/tables/sheriff-cell";
+import { SheriffRunDrawer } from "@/ui/components/tables/sheriff-run-drawer";
 import { ConfirmDeleteDialog } from "@/ui/components/tables/confirm-delete-dialog";
 import { RenameColumnDialog } from "@/ui/components/tables/rename-column-dialog";
 import { Button } from "@/ui/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/ui/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,11 +52,38 @@ import {
   ArrowUp01Icon,
   BanIcon,
   MoreVerticalIcon,
+  PlayIcon,
 } from "@hugeicons/core-free-icons";
 
-function claygentRunKey(rowId: string, columnId: string) {
+function sheriffRunKey(rowId: string, columnId: string) {
   return `${rowId}:${columnId}`;
 }
+
+type SheriffSelection = {
+  columnId: string;
+  rowIds: string[];
+};
+
+type SheriffAnchor = {
+  columnId: string;
+  rowId: string;
+};
+
+function rowIdsBetween(orderedRowIds: string[], fromId: string, toId: string) {
+  const fromIndex = orderedRowIds.indexOf(fromId);
+  const toIndex = orderedRowIds.indexOf(toId);
+  if (fromIndex === -1 || toIndex === -1) {
+    return [toId];
+  }
+  const start = Math.min(fromIndex, toIndex);
+  const end = Math.max(fromIndex, toIndex);
+  return orderedRowIds.slice(start, end + 1);
+}
+
+const rowNumberColumnClass =
+  "sticky left-0 z-10 w-12 min-w-12 select-none border-r bg-card px-1 text-center group-hover:bg-muted/50";
+const rowNumberHeaderClass =
+  "sticky left-0 z-20 w-12 min-w-12 select-none border-r bg-card px-1 text-center";
 
 const columnHelper = createColumnHelper<TableGridFeatures, RowResponse>();
 
@@ -98,7 +131,10 @@ export function TableDataGrid({
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
   const [pendingRuns, setPendingRuns] = useState<Set<string>>(() => new Set());
   const [inspected, setInspected] = useState<{ rowId: string; columnId: string } | null>(null);
+  const [sheriffSelection, setSheriffSelection] = useState<SheriffSelection | null>(null);
   const draggingIdRef = useRef<string | null>(null);
+  const sheriffAnchorRef = useRef<SheriffAnchor | null>(null);
+  const orderedRowIdsRef = useRef<string[]>([]);
   const columnsRef = useRef(schemaColumns);
   columnsRef.current = schemaColumns;
 
@@ -110,36 +146,44 @@ export function TableDataGrid({
     },
   });
 
-  const runClaygent = useMutation({
+  const runSheriff = useMutation({
     mutationFn: ({
-      rowId,
+      rowIds,
       columnId,
       overwrite,
     }: {
-      rowId: string;
+      rowIds: string[];
       columnId: string;
       overwrite: boolean;
-    }) => startClaygentRun(tableId, columnId, { row_ids: [rowId], overwrite }),
-    onMutate: ({ rowId, columnId }) => {
-      const key = claygentRunKey(rowId, columnId);
+    }) => startSheriffRun(tableId, columnId, { row_ids: rowIds, overwrite }),
+    onMutate: ({ rowIds, columnId }) => {
       setPendingRuns((current) => {
         const next = new Set(current);
-        next.add(key);
+        for (const rowId of rowIds) {
+          next.add(sheriffRunKey(rowId, columnId));
+        }
         return next;
       });
     },
-    onSuccess: async (_run, { rowId, columnId }) => {
-      await queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId) });
+    onSuccess: async (_run, { rowIds, columnId }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId) }),
+        queryClient.invalidateQueries({ queryKey: tableKeys.rowList(tableId) }),
+      ]);
       setPendingRuns((current) => {
         const next = new Set(current);
-        next.delete(claygentRunKey(rowId, columnId));
+        for (const rowId of rowIds) {
+          next.delete(sheriffRunKey(rowId, columnId));
+        }
         return next;
       });
     },
-    onError: (_error, { rowId, columnId }) => {
+    onError: (_error, { rowIds, columnId }) => {
       setPendingRuns((current) => {
         const next = new Set(current);
-        next.delete(claygentRunKey(rowId, columnId));
+        for (const rowId of rowIds) {
+          next.delete(sheriffRunKey(rowId, columnId));
+        }
         return next;
       });
     },
@@ -201,13 +245,66 @@ export function TableDataGrid({
   const canHideColumn = displayColumns.length > 1;
   const canReorder = displayColumns.length > 1;
 
+  function clearSheriffSelection() {
+    sheriffAnchorRef.current = null;
+    setSheriffSelection(null);
+  }
+
+  function selectSheriffCell(rowId: string, columnId: string) {
+    sheriffAnchorRef.current = { columnId, rowId };
+    setSheriffSelection({ columnId, rowIds: [rowId] });
+  }
+
+  function handleSheriffPointer(event: React.MouseEvent, rowId: string, columnId: string) {
+    if (event.shiftKey) {
+      const anchor = sheriffAnchorRef.current;
+      if (anchor && anchor.columnId === columnId) {
+        setSheriffSelection({
+          columnId,
+          rowIds: rowIdsBetween(orderedRowIdsRef.current, anchor.rowId, rowId),
+        });
+      } else {
+        selectSheriffCell(rowId, columnId);
+      }
+      return;
+    }
+    sheriffAnchorRef.current = { columnId, rowId };
+    setSheriffSelection(null);
+  }
+
+  function handleSheriffContextOpen(rowId: string, columnId: string) {
+    const selected =
+      sheriffSelection?.columnId === columnId && sheriffSelection.rowIds.includes(rowId);
+    if (!selected) {
+      selectSheriffCell(rowId, columnId);
+    }
+  }
+
+  function runSelectedSheriffCells(rowId: string, columnId: string) {
+    const rowIds =
+      sheriffSelection?.columnId === columnId && sheriffSelection.rowIds.includes(rowId)
+        ? sheriffSelection.rowIds
+        : [rowId];
+    runSheriff.mutate({ rowIds, columnId, overwrite: false });
+    clearSheriffSelection();
+  }
+
   const tableColumns = useMemo(
     () =>
       columnHelper.columns([
+        columnHelper.display({
+          id: "row-number",
+          header: () => <span aria-label="Row number">#</span>,
+          cell: ({ row }) => (
+            <span className="tabular-nums text-muted-foreground">
+              {pagination.pageIndex * pagination.pageSize + row.index + 1}
+            </span>
+          ),
+        }),
         ...displayColumns.map((column) =>
           columnHelper.accessor((row) => row.values[column.id] ?? null, {
             id: column.id,
-            enableSorting: column.type !== "claygent",
+            enableSorting: column.type !== "sheriff",
             header: ({ header }) => {
               const canSort = header.column.getCanSort();
               const sorted = header.column.getIsSorted();
@@ -298,13 +395,13 @@ export function TableDataGrid({
               );
             },
             cell: ({ row, getValue }) =>
-              column.type === "claygent" ? (
-                <ClaygentCell
+              column.type === "sheriff" ? (
+                <SheriffCell
                   value={getValue()}
-                  pending={pendingRuns.has(claygentRunKey(row.original.id, column.id))}
+                  pending={pendingRuns.has(sheriffRunKey(row.original.id, column.id))}
                   onRun={() =>
-                    runClaygent.mutate({
-                      rowId: row.original.id,
+                    runSheriff.mutate({
+                      rowIds: [row.original.id],
                       columnId: column.id,
                       overwrite: false,
                     })
@@ -351,7 +448,7 @@ export function TableDataGrid({
           ),
         }),
       ]),
-    [canHideColumn, canReorder, displayColumns, hideColumn, pendingRuns, runClaygent, saveCell],
+    [canHideColumn, canReorder, displayColumns, hideColumn, pagination.pageIndex, pagination.pageSize, pendingRuns, runSheriff, saveCell],
   );
 
   const table = useTable({
@@ -365,6 +462,41 @@ export function TableDataGrid({
     onPaginationChange,
   });
 
+  orderedRowIdsRef.current = table.getRowModel().rows.map((row) => row.id);
+
+  useEffect(() => {
+    clearSheriffSelection();
+  }, [pagination.pageIndex, pagination.pageSize, tableId]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        clearSheriffSelection();
+      }
+    }
+
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.closest("[data-sheriff-cell]")) {
+        return;
+      }
+      if (target.closest("[data-slot='context-menu-content']")) {
+        return;
+      }
+      clearSheriffSelection();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, []);
+
   const pageCount = table.getPageCount();
   const pageIndex = table.state.pagination.pageIndex;
   const showingFrom = total === 0 ? 0 : pageIndex * pagination.pageSize + 1;
@@ -374,9 +506,9 @@ export function TableDataGrid({
     : undefined;
   const inspectedRow = inspected ? rows.find((row) => row.id === inspected.rowId) : undefined;
   const inspectedInFlight = inspected
-    ? claygentInFlightStatus(
+    ? sheriffInFlightStatus(
         inspectedRow?.values[inspected.columnId],
-        pendingRuns.has(claygentRunKey(inspected.rowId, inspected.columnId)),
+        pendingRuns.has(sheriffRunKey(inspected.rowId, inspected.columnId)),
       )
     : null;
 
@@ -391,18 +523,20 @@ export function TableDataGrid({
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
-                  const isColumnHeader = header.id !== "row-actions";
+                  const isRowNumber = header.id === "row-number";
+                  const isColumnHeader = header.id !== "row-actions" && !isRowNumber;
                   return (
                     <TableHead
                       key={header.id}
                       data-column-head={isColumnHeader ? header.id : undefined}
                       className={cn(
+                        isRowNumber && rowNumberHeaderClass,
                         isColumnHeader &&
                           "data-[dragging=true]:opacity-50 data-[drop-target=true]:shadow-[inset_2px_0_0_0_currentColor]",
                       )}
@@ -457,12 +591,71 @@ export function TableDataGrid({
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getAllCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      <table.FlexRender cell={cell} />
-                    </TableCell>
-                  ))}
+                <TableRow key={row.id} className="group">
+                  {row.getAllCells().map((cell) => {
+                    if (cell.column.id === "row-number") {
+                      return (
+                        <TableCell key={cell.id} className={rowNumberColumnClass}>
+                          <table.FlexRender cell={cell} />
+                        </TableCell>
+                      );
+                    }
+
+                    const schemaColumn = schemaColumns.find((column) => column.id === cell.column.id);
+                    if (schemaColumn?.type === "sheriff") {
+                      const selected =
+                        sheriffSelection?.columnId === schemaColumn.id &&
+                        sheriffSelection.rowIds.includes(row.original.id);
+                      const selectedCount = selected ? sheriffSelection.rowIds.length : 1;
+                      return (
+                        <TableCell
+                          key={cell.id}
+                          data-sheriff-cell=""
+                          aria-selected={selected || undefined}
+                          className={cn(
+                            "p-0",
+                            selected && "bg-primary/10 ring-1 ring-inset ring-primary/25",
+                          )}
+                          onMouseDown={(event) => {
+                            if (event.button !== 0) {
+                              return;
+                            }
+                            if (event.shiftKey) {
+                              event.preventDefault();
+                            }
+                            handleSheriffPointer(event, row.original.id, schemaColumn.id);
+                          }}
+                        >
+                          <ContextMenu
+                            onOpenChange={(open) => {
+                              if (open) {
+                                handleSheriffContextOpen(row.original.id, schemaColumn.id);
+                              }
+                            }}
+                          >
+                            <ContextMenuTrigger className="block select-none p-2">
+                              <table.FlexRender cell={cell} />
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              <ContextMenuItem
+                                disabled={runSheriff.isPending}
+                                onClick={() => runSelectedSheriffCells(row.original.id, schemaColumn.id)}
+                              >
+                                <HugeiconsIcon icon={PlayIcon} strokeWidth={2} />
+                                Run {selectedCount} selected {selectedCount === 1 ? "cell" : "cells"}
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        </TableCell>
+                      );
+                    }
+
+                    return (
+                      <TableCell key={cell.id}>
+                        <table.FlexRender cell={cell} />
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))
             ) : (
@@ -478,14 +671,14 @@ export function TableDataGrid({
         </Table>
       </div>
 
-      {moveColumns.error || hideColumn.error || runClaygent.error ? (
+      {moveColumns.error || hideColumn.error || runSheriff.error ? (
         <p className="text-sm text-destructive">
           {mutationErrorMessage(
             moveColumns.error,
             moveColumns.isError ? "Failed to reorder columns" : "",
           ) ||
             mutationErrorMessage(hideColumn.error, hideColumn.isError ? "Failed to hide column" : "") ||
-            mutationErrorMessage(runClaygent.error, runClaygent.isError ? "Failed to run research" : "")}
+            mutationErrorMessage(runSheriff.error, runSheriff.isError ? "Failed to run research" : "")}
         </p>
       ) : null}
 
@@ -533,35 +726,35 @@ export function TableDataGrid({
         column={renameColumn}
       />
 
-      <ClaygentRunDrawer
+      <SheriffRunDrawer
         open={inspected !== null}
         onOpenChange={(open) => {
           if (!open) {
             setInspected(null);
-            if (!runClaygent.isPending) {
-              runClaygent.reset();
+            if (!runSheriff.isPending) {
+              runSheriff.reset();
             }
           }
         }}
-        columnName={inspectedColumn?.name ?? "Claygent"}
+        columnName={inspectedColumn?.name ?? "Sheriff"}
         columnId={inspected?.columnId ?? ""}
         value={inspectedRow?.values[inspected?.columnId ?? ""]}
         columns={schemaColumns}
         inFlight={inspectedInFlight}
         rerunPending={
           inspected
-            ? runClaygent.isPending &&
-              runClaygent.variables?.rowId === inspected.rowId &&
-              runClaygent.variables?.columnId === inspected.columnId
+            ? runSheriff.isPending &&
+              Boolean(runSheriff.variables?.rowIds.includes(inspected.rowId)) &&
+              runSheriff.variables?.columnId === inspected.columnId
             : false
         }
         error={
           inspected &&
-          runClaygent.variables?.rowId === inspected.rowId &&
-          runClaygent.variables?.columnId === inspected.columnId
+          runSheriff.variables?.rowIds.includes(inspected.rowId) &&
+          runSheriff.variables?.columnId === inspected.columnId
             ? mutationErrorMessage(
-                runClaygent.error,
-                runClaygent.isError ? "Failed to run research" : "",
+                runSheriff.error,
+                runSheriff.isError ? "Failed to run research" : "",
               )
             : null
         }
@@ -569,8 +762,8 @@ export function TableDataGrid({
           if (!inspected) {
             return;
           }
-          runClaygent.mutate({
-            rowId: inspected.rowId,
+          runSheriff.mutate({
+            rowIds: [inspected.rowId],
             columnId: inspected.columnId,
             overwrite: true,
           });

@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import {
-  parseClaygentCell,
+  parseSheriffCell,
   type CellValue,
-  type ClaygentCellStatus,
+  type SheriffCellStatus,
   type ColumnResponse,
 } from "@/lib/tables";
 import { Button } from "@/ui/components/ui/button";
@@ -26,7 +26,7 @@ import {
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 
-type ClaygentRunDrawerProps = {
+type SheriffRunDrawerProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   columnName: string;
@@ -39,7 +39,7 @@ type ClaygentRunDrawerProps = {
   onRerun: () => void;
 };
 
-export function ClaygentRunDrawer({
+export function SheriffRunDrawer({
   open,
   onOpenChange,
   columnName,
@@ -50,8 +50,8 @@ export function ClaygentRunDrawer({
   rerunPending = false,
   error = null,
   onRerun,
-}: ClaygentRunDrawerProps) {
-  const cell = parseClaygentCell(value);
+}: SheriffRunDrawerProps) {
+  const cell = parseSheriffCell(value);
   const phase = rerunPending ? "queued" : inFlight;
   const busy = phase === "queued" || phase === "running";
   const childrenByField = new Map(
@@ -190,7 +190,7 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
 function StatusLine({
   status,
 }: {
-  status: ClaygentCellStatus | undefined;
+  status: SheriffCellStatus | undefined;
 }) {
   if (status === "queued") {
     return (

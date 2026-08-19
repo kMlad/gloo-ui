@@ -116,7 +116,7 @@ export function TablesList({ tables }: TablesListProps) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

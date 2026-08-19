@@ -66,7 +66,12 @@ export function EditableTextCell({ value, disabled = false, onSave }: EditableTe
       type="button"
       disabled={disabled}
       className="flex h-7 min-w-40 max-w-80 items-center rounded-md px-2 text-left text-sm hover:bg-muted/70 disabled:opacity-50"
-      onClick={() => setEditing(true)}
+      onClick={(event) => {
+        if (event.detail === 0) {
+          setEditing(true);
+        }
+      }}
+      onDoubleClick={() => setEditing(true)}
     >
       <span className={display ? "truncate text-foreground" : "truncate text-muted-foreground"}>
         {display || "Empty"}

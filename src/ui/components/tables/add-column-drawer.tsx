@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   addColumn,
-  claygentColumnCreateSchema,
-  claygentExpandRequestSchema,
-  expandClaygentPrompt,
+  sheriffColumnCreateSchema,
+  sheriffExpandRequestSchema,
+  expandSheriffPrompt,
   isTableResponse,
   mutationErrorMessage,
   primitiveColumnCreateSchema,
@@ -62,7 +62,7 @@ function slashMentionAt(text: string, cursor: number): SlashMention | null {
   return { start: cursor - match[1].length, query: match[2] };
 }
 
-type DrawerView = "picker" | "regular" | "claygent";
+type DrawerView = "picker" | "regular" | "sheriff";
 
 type DraftOutput = {
   id: string;
@@ -85,7 +85,7 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
   const [view, setView] = useState<DrawerView>("picker");
   const [regularName, setRegularName] = useState("");
   const [regularType, setRegularType] = useState<PrimitiveColumnType>("text");
-  const [claygentName, setClaygentName] = useState("");
+  const [sheriffName, setSheriffName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [sourcePrompt, setSourcePrompt] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<DraftOutput[]>([emptyOutput()]);
@@ -107,7 +107,7 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
   });
 
   const mentionableColumns = useMemo(
-    () => columns.filter((column) => column.type !== "claygent"),
+    () => columns.filter((column) => column.type !== "sheriff"),
     [columns],
   );
   const mentionMatches = useMemo(() => {
@@ -137,7 +137,7 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
   }, [prompt]);
 
   const expand = useMutation({
-    mutationFn: (goal: string) => expandClaygentPrompt(tableId, { goal }),
+    mutationFn: (goal: string) => expandSheriffPrompt(tableId, { goal }),
     onSuccess: (result) => {
       setSourcePrompt(result.user_prompt);
       setPrompt(result.enhanced_prompt);
@@ -154,7 +154,7 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
     setView("picker");
     setRegularName("");
     setRegularType("text");
-    setClaygentName("");
+    setSheriffName("");
     setPrompt("");
     setSourcePrompt(null);
     setMention(null);
@@ -188,23 +188,23 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
     create.mutate(parsed.data);
   }
 
-  function handleClaygentSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleSheriffSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setValidationError(null);
     create.reset();
     expand.reset();
 
-    const parsed = claygentColumnCreateSchema.safeParse({
-      name: claygentName,
-      type: "claygent",
-      claygent: {
+    const parsed = sheriffColumnCreateSchema.safeParse({
+      name: sheriffName,
+      type: "sheriff",
+      sheriff: {
         user_prompt: sourcePrompt ?? prompt,
         enhanced_prompt: sourcePrompt ? prompt : undefined,
         outputs: outputs.map((field) => ({ key: field.key, type: field.type })),
       },
     });
     if (!parsed.success) {
-      setValidationError(parsed.error.issues[0]?.message ?? "Invalid claygent column");
+      setValidationError(parsed.error.issues[0]?.message ?? "Invalid sheriff column");
       return;
     }
 
@@ -214,7 +214,7 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
   function handleExpand() {
     setValidationError(null);
     expand.reset();
-    const parsed = claygentExpandRequestSchema.safeParse({ goal: prompt });
+    const parsed = sheriffExpandRequestSchema.safeParse({ goal: prompt });
     if (!parsed.success) {
       setValidationError(parsed.error.issues[0]?.message ?? "Enter a prompt to expand");
       return;
@@ -276,11 +276,11 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
       mutationErrorMessage(expand.error, expand.isError ? "Failed to expand prompt" : ""));
 
   const title =
-    view === "regular" ? "Text or boolean" : view === "claygent" ? "Claygent" : "Add column";
+    view === "regular" ? "Text or boolean" : view === "sheriff" ? "Sheriff" : "Add column";
   const description =
     view === "regular"
       ? "Text or boolean. Column type cannot be changed later."
-      : view === "claygent"
+      : view === "sheriff"
         ? "Research the web and write results into output columns."
         : "Choose the kind of column to add.";
 
@@ -325,9 +325,9 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
               />
               <ColumnTypeOption
                 icon={Sheriff01Icon}
-                title="Claygent"
+                title="Sheriff"
                 description="A research prompt that writes into child columns."
-                onClick={() => setView("claygent")}
+                onClick={() => setView("sheriff")}
               />
             </div>
             <DrawerFooter className="flex-row justify-end">
@@ -399,17 +399,17 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
           </form>
         ) : null}
 
-        {view === "claygent" ? (
-          <form onSubmit={handleClaygentSubmit} className="flex min-h-0 flex-1 flex-col">
+        {view === "sheriff" ? (
+          <form onSubmit={handleSheriffSubmit} className="flex min-h-0 flex-1 flex-col">
             <FieldGroup className="flex-1 gap-4 overflow-y-auto p-4">
               <Field>
-                <FieldLabel htmlFor="claygent-name" className="text-xs text-muted-foreground">
+                <FieldLabel htmlFor="sheriff-name" className="text-xs text-muted-foreground">
                   Name
                 </FieldLabel>
                 <Input
-                  id="claygent-name"
-                  value={claygentName}
-                  onChange={(event) => setClaygentName(event.target.value)}
+                  id="sheriff-name"
+                  value={sheriffName}
+                  onChange={(event) => setSheriffName(event.target.value)}
                   placeholder="CEO"
                   required
                   autoFocus
@@ -418,7 +418,7 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
               </Field>
               <Field>
                 <div className="flex items-center justify-between gap-2">
-                  <FieldLabel htmlFor="claygent-prompt" className="text-xs text-muted-foreground">
+                  <FieldLabel htmlFor="sheriff-prompt" className="text-xs text-muted-foreground">
                     Prompt
                   </FieldLabel>
                   <Button
@@ -433,7 +433,7 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
                 </div>
                 <div className="relative">
                   <textarea
-                    id="claygent-prompt"
+                    id="sheriff-prompt"
                     ref={promptRef}
                     value={prompt}
                     onChange={(event) => {

@@ -30,7 +30,7 @@ export function DashboardPage() {
   const name = email.split("@")[0] || "there";
 
   return (
-    <div className="flex flex-1 flex-col gap-8 p-6 md:p-8">
+    <div className="flex min-w-0 flex-1 flex-col gap-8 p-6 md:p-8">
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-2xl font-semibold tracking-tight text-foreground">
           Welcome back, {name}

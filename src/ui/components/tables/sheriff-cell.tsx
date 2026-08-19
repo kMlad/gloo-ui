@@ -1,7 +1,7 @@
 import {
-  parseClaygentCell,
+  parseSheriffCell,
   type CellValue,
-  type ClaygentConfidence,
+  type SheriffConfidence,
 } from "@/lib/tables";
 import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -16,7 +16,7 @@ import {
 const cellClass =
   "flex h-7 min-w-40 max-w-80 items-center gap-1.5 rounded-md px-2 text-sm";
 
-type ClaygentCellProps = {
+type SheriffCellProps = {
   value: CellValue;
   pending?: boolean;
   disabled?: boolean;
@@ -24,14 +24,14 @@ type ClaygentCellProps = {
   onOpen: () => void;
 };
 
-export function ClaygentCell({
+export function SheriffCell({
   value,
   pending = false,
   disabled = false,
   onRun,
   onOpen,
-}: ClaygentCellProps) {
-  const cell = parseClaygentCell(value);
+}: SheriffCellProps) {
+  const cell = parseSheriffCell(value);
   const status = pending ? "queued" : cell?.status;
 
   if (status === "queued") {
@@ -58,7 +58,12 @@ export function ClaygentCell({
         type="button"
         disabled={disabled}
         className={cn(cellClass, "text-left hover:bg-muted/70 disabled:opacity-50")}
-        onClick={onOpen}
+        onClick={(event) => {
+          if (event.shiftKey) {
+            return;
+          }
+          onOpen();
+        }}
       >
         <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-3.5 shrink-0 text-foreground" />
         <span className="truncate capitalize">{confidenceLabel(cell.confidence)}</span>
@@ -72,7 +77,12 @@ export function ClaygentCell({
         type="button"
         disabled={disabled}
         className={cn(cellClass, "text-left text-destructive hover:bg-muted/70 disabled:opacity-50")}
-        onClick={onOpen}
+        onClick={(event) => {
+          if (event.shiftKey) {
+            return;
+          }
+          onOpen();
+        }}
       >
         <HugeiconsIcon icon={Alert02Icon} strokeWidth={2} className="size-3.5 shrink-0" />
         <span className="truncate">Failed</span>
@@ -85,7 +95,12 @@ export function ClaygentCell({
       type="button"
       disabled={disabled}
       className={cn(cellClass, "text-muted-foreground hover:bg-muted/70 disabled:opacity-50")}
-      onClick={onRun}
+      onClick={(event) => {
+        if (event.shiftKey) {
+          return;
+        }
+        onRun();
+      }}
     >
       <HugeiconsIcon icon={PlayIcon} strokeWidth={2} className="size-3.5" />
       Run
@@ -93,7 +108,7 @@ export function ClaygentCell({
   );
 }
 
-function confidenceLabel(confidence: ClaygentConfidence | null | undefined) {
+function confidenceLabel(confidence: SheriffConfidence | null | undefined) {
   if (!confidence) {
     return "Succeeded";
   }

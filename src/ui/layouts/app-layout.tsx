@@ -13,7 +13,7 @@ export function AppLayout() {
           <Separator orientation="vertical" className="h-4" />
           <span className="text-sm font-medium text-muted-foreground">Gloo</span>
         </header>
-        <main className="flex flex-1 flex-col">
+        <main className="flex min-w-0 flex-1 flex-col">
           <Outlet />
         </main>
       </SidebarInset>

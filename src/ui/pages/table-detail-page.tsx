@@ -7,7 +7,7 @@ import {
   listRows,
   mutationErrorMessage,
   ROW_PAGE_SIZE,
-  rowsHaveActiveClaygent,
+  rowsHaveActiveSheriff,
   tableKeys,
   tableUpdateSchema,
   updateTable,
@@ -49,7 +49,7 @@ export function TableDetailPage() {
     refetchInterval: (query) => {
       const items = query.state.data?.items;
       const columns = tableQuery.data?.columns;
-      if (!items || !columns || !rowsHaveActiveClaygent(items, columns)) {
+      if (!items || !columns || !rowsHaveActiveSheriff(items, columns)) {
         return false;
       }
       return 2000;
@@ -72,7 +72,7 @@ export function TableDetailPage() {
     mutationErrorMessage(rowsQuery.error, rowsQuery.isError ? "Failed to load rows" : "");
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6 md:p-8">
+    <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-x-hidden p-6 md:p-8">
       <div className="flex flex-col gap-4">
         <Link
           to="/tables"
