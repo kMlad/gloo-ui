@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   createTable,
-  columnTypeSchema,
+  primitiveColumnTypeSchema,
   mutationErrorMessage,
   tableCreateSchema,
   tableKeys,
-  type ColumnType,
+  type PrimitiveColumnType,
 } from "@/lib/tables";
 import { Button } from "@/ui/components/ui/button";
 import {
@@ -25,7 +25,7 @@ import { Add01Icon, Cancel01Icon, UnfoldMoreIcon } from "@hugeicons/core-free-ic
 type DraftColumn = {
   key: string;
   name: string;
-  type: ColumnType;
+  type: PrimitiveColumnType;
 };
 
 type CreateTableDialogProps = {
@@ -149,7 +149,7 @@ export function CreateTableDialog({ open, onOpenChange, onCreated }: CreateTable
                     <select
                       value={column.type}
                       onChange={(event) => {
-                        const parsed = columnTypeSchema.safeParse(event.target.value);
+                        const parsed = primitiveColumnTypeSchema.safeParse(event.target.value);
                         if (!parsed.success) {
                           return;
                         }

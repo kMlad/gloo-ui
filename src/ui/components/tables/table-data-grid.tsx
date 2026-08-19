@@ -40,9 +40,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowDown01Icon,
   ArrowUp01Icon,
-  ArrowUpDownIcon,
-  GripVerticalIcon,
-  MoreHorizontalIcon,
+  BanIcon,
+  MoreVerticalIcon,
+  PlayIcon,
 } from "@hugeicons/core-free-icons";
 
 const columnHelper = createColumnHelper<TableGridFeatures, RowResponse>();
@@ -163,57 +163,103 @@ export function TableDataGrid({
         ...displayColumns.map((column) =>
           columnHelper.accessor((row) => row.values[column.id] ?? null, {
             id: column.id,
-            header: () => (
-              <div className="flex items-center gap-1">
-                {canReorder ? (
+            enableSorting: column.type !== "claygent",
+            header: ({ header }) => {
+              const canSort = header.column.getCanSort();
+              const sorted = header.column.getIsSorted();
+              return (
+                <div className="flex items-center gap-1">
                   <span
-                    draggable
-                    aria-label={`Reorder ${column.name}`}
-                    className="inline-flex cursor-grab touch-none select-none text-muted-foreground [&_svg]:pointer-events-none active:cursor-grabbing"
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData("text/plain", column.id);
-                      event.dataTransfer.effectAllowed = "move";
-                      draggingIdRef.current = column.id;
-                      const headerCell = event.currentTarget.closest("[data-column-head]");
-                      if (headerCell instanceof HTMLElement) {
-                        headerCell.dataset.dragging = "true";
-                      }
-                    }}
-                    onDragEnd={(event) => {
-                      draggingIdRef.current = null;
-                      clearColumnDragMarks(event.currentTarget);
-                    }}
-                  >
-                    <HugeiconsIcon icon={GripVerticalIcon} strokeWidth={2} className="size-3.5" />
-                  </span>
-                ) : null}
-                <span>{column.name}</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button variant="ghost" size="icon-xs" aria-label={`${column.name} column actions`} />
+                    draggable={canReorder}
+                    aria-label={canReorder ? `Reorder ${column.name}` : undefined}
+                    className={
+                      canReorder
+                        ? "cursor-grab touch-none select-none active:cursor-grabbing"
+                        : undefined
+                    }
+                    onDragStart={
+                      canReorder
+                        ? (event) => {
+                            event.dataTransfer.setData("text/plain", column.id);
+                            event.dataTransfer.effectAllowed = "move";
+                            draggingIdRef.current = column.id;
+                            const headerCell = event.currentTarget.closest("[data-column-head]");
+                            if (headerCell instanceof HTMLElement) {
+                              headerCell.dataset.dragging = "true";
+                            }
+                          }
+                        : undefined
+                    }
+                    onDragEnd={
+                      canReorder
+                        ? (event) => {
+                            draggingIdRef.current = null;
+                            clearColumnDragMarks(event.currentTarget);
+                          }
+                        : undefined
                     }
                   >
-                    <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={() => setRenameColumn(column)}>Rename</DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={!canHideColumn || hideColumn.isPending}
-                      onClick={() => hideColumn.mutate(column.id)}
+                    {column.name}
+                  </span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button variant="ghost" size="icon-sm" aria-label={`${column.name} column actions`} />
+                      }
                     >
-                      Hide
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem variant="destructive" onClick={() => setDeleteColumnTarget(column)}>
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ),
+                      <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {canSort ? (
+                        <>
+                          {sorted === "asc" ? (
+                            <DropdownMenuItem onClick={() => header.column.clearSorting()}>
+                              <HugeiconsIcon icon={BanIcon} strokeWidth={2} />
+                              remove sort
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onClick={() => header.column.toggleSorting(false)}>
+                              <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} />
+                              asc
+                            </DropdownMenuItem>
+                          )}
+                          {sorted === "desc" ? (
+                            <DropdownMenuItem onClick={() => header.column.clearSorting()}>
+                              <HugeiconsIcon icon={BanIcon} strokeWidth={2} />
+                              remove sort
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onClick={() => header.column.toggleSorting(true)}>
+                              <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} />
+                              desc
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                        </>
+                      ) : null}
+                      <DropdownMenuItem onClick={() => setRenameColumn(column)}>Rename</DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={!canHideColumn || hideColumn.isPending}
+                        onClick={() => hideColumn.mutate(column.id)}
+                      >
+                        Hide
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onClick={() => setDeleteColumnTarget(column)}>
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              );
+            },
             cell: ({ row, getValue }) =>
-              column.type === "boolean" ? (
+              column.type === "claygent" ? (
+                <span className="flex h-7 min-w-40 items-center gap-1.5 px-2 text-sm text-muted-foreground">
+                  <HugeiconsIcon icon={PlayIcon} strokeWidth={2} className="size-3.5" />
+                  Run
+                </span>
+              ) : column.type === "boolean" ? (
                 <BooleanCell
                   value={getValue()}
                   disabled={saveCell.isPending}
@@ -241,7 +287,7 @@ export function TableDataGrid({
                 <DropdownMenuTrigger
                   render={<Button variant="ghost" size="icon-sm" aria-label="Row actions" />}
                 >
-                  <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} />
+                  <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem variant="destructive" onClick={() => setDeleteRowId(row.original.id)}>
@@ -289,8 +335,6 @@ export function TableDataGrid({
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
-                  const canSort = header.column.getCanSort();
-                  const sorted = header.column.getIsSorted();
                   const isColumnHeader = header.id !== "row-actions";
                   return (
                     <TableHead
@@ -341,31 +385,7 @@ export function TableDataGrid({
                           : undefined
                       }
                     >
-                      {header.isPlaceholder ? null : (
-                        <div className="flex items-center gap-1">
-                          {canSort ? (
-                            <button
-                              type="button"
-                              className="inline-flex items-center"
-                              aria-label="Sort column"
-                              onClick={header.column.getToggleSortingHandler()}
-                            >
-                              <HugeiconsIcon
-                                icon={
-                                  sorted === "asc"
-                                    ? ArrowUp01Icon
-                                    : sorted === "desc"
-                                      ? ArrowDown01Icon
-                                      : ArrowUpDownIcon
-                                }
-                                strokeWidth={2}
-                                className="size-3.5 text-muted-foreground"
-                              />
-                            </button>
-                          ) : null}
-                          <table.FlexRender header={header} />
-                        </div>
-                      )}
+                      {header.isPlaceholder ? null : <table.FlexRender header={header} />}
                     </TableHead>
                   );
                 })}

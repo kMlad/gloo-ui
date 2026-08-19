@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PaginationState } from "@tanstack/react-table";
 import {
-  addRow,
-  deleteTable,
   getTable,
   listRows,
   mutationErrorMessage,
@@ -13,8 +11,7 @@ import {
   tableUpdateSchema,
   updateTable,
 } from "@/lib/tables";
-import { AddColumnDialog } from "@/ui/components/tables/add-column-dialog";
-import { ConfirmDeleteDialog } from "@/ui/components/tables/confirm-delete-dialog";
+import { AddColumnDrawer } from "@/ui/components/tables/add-column-drawer";
 import { HiddenColumnsMenu } from "@/ui/components/tables/hidden-columns-menu";
 import { TableDataGrid } from "@/ui/components/tables/table-data-grid";
 import { TableFilterBar } from "@/ui/components/tables/table-filter-bar";
@@ -26,10 +23,7 @@ import { Add01Icon, ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 
 export function TableDetailPage() {
   const { tableId } = useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [addColumnOpen, setAddColumnOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: ROW_PAGE_SIZE,
@@ -53,26 +47,6 @@ export function TableDetailPage() {
     enabled: Boolean(tableId),
   });
 
-  const createRow = useMutation({
-    mutationFn: () => addRow(tableId ?? "", {}),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId ?? "") });
-      await queryClient.invalidateQueries({ queryKey: tableKeys.all });
-      setPagination((current) => {
-        const lastIndex = Math.max(0, Math.ceil((total + 1) / current.pageSize) - 1);
-        return { ...current, pageIndex: lastIndex };
-      });
-    },
-  });
-
-  const removeTable = useMutation({
-    mutationFn: () => deleteTable(tableId ?? ""),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: tableKeys.all });
-      void navigate("/tables");
-    },
-  });
-
   if (!tableId) {
     return (
       <div className="p-6 md:p-8">
@@ -87,9 +61,6 @@ export function TableDetailPage() {
   const loadError =
     mutationErrorMessage(tableQuery.error, tableQuery.isError ? "Failed to load table" : "") ||
     mutationErrorMessage(rowsQuery.error, rowsQuery.isError ? "Failed to load rows" : "");
-  const actionError =
-    mutationErrorMessage(createRow.error, createRow.isError ? "Failed to add row" : "") ||
-    mutationErrorMessage(removeTable.error, removeTable.isError ? "Failed to delete table" : "");
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6 md:p-8">
@@ -119,27 +90,15 @@ export function TableDetailPage() {
               : "Loading schema and rows."}
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => setAddColumnOpen(true)}>
+            <Button type="button" onClick={() => setAddColumnOpen(true)}>
               <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
               Add column
-            </Button>
-            <Button
-              type="button"
-              disabled={!table || table.columns.length === 0 || createRow.isPending}
-              onClick={() => createRow.mutate()}
-            >
-              <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
-              {createRow.isPending ? "Adding…" : "Add row"}
-            </Button>
-            <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
-              Delete table
             </Button>
           </div>
         </div>
       </div>
 
       {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
-      {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
 
       {table && table.columns.length > 0 ? (
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -176,27 +135,11 @@ export function TableDetailPage() {
         />
       ) : null}
 
-      <AddColumnDialog open={addColumnOpen} onOpenChange={setAddColumnOpen} tableId={tableId} />
-      <ConfirmDeleteDialog
-        open={deleteOpen}
-        onOpenChange={(open) => {
-          if (!open && !removeTable.isPending) {
-            setDeleteOpen(false);
-            removeTable.reset();
-          }
-        }}
-        title="Delete table"
-        description={
-          table
-            ? `Delete “${table.name}”? This removes the table, its columns, and all rows.`
-            : "Delete this table?"
-        }
-        isPending={removeTable.isPending}
-        error={mutationErrorMessage(
-          removeTable.error,
-          removeTable.isError ? "Failed to delete table" : "",
-        )}
-        onConfirm={() => removeTable.mutate()}
+      <AddColumnDrawer
+        open={addColumnOpen}
+        onOpenChange={setAddColumnOpen}
+        tableId={tableId}
+        columns={table?.columns ?? []}
       />
     </div>
   );

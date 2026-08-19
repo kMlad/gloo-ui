@@ -1,18 +1,80 @@
 import { z } from "zod";
 import { apiFetch } from "@/lib/api";
 
-export const columnTypeSchema = z.enum(["text", "boolean"]);
+export const primitiveColumnTypeSchema = z.enum(["text", "boolean"]);
+export type PrimitiveColumnType = z.infer<typeof primitiveColumnTypeSchema>;
+
+export const columnTypeSchema = z.enum(["text", "boolean", "claygent"]);
 export type ColumnType = z.infer<typeof columnTypeSchema>;
 
-export const columnCreateSchema = z.object({
-  name: z.string().trim().min(1, "Column name is required").max(200),
-  type: columnTypeSchema.default("text"),
+const columnNameSchema = z.string().trim().min(1, "Column name is required").max(200);
+
+export const claygentOutputKeySchema = z
+  .string()
+  .trim()
+  .min(1, "Output key is required")
+  .max(64)
+  .regex(/^[a-z][a-z0-9_]*$/, "Use lowercase snake_case, e.g. first_name");
+
+export const claygentOutputFieldSchema = z.object({
+  key: claygentOutputKeySchema,
+  type: primitiveColumnTypeSchema,
 });
+export type ClaygentOutputField = z.infer<typeof claygentOutputFieldSchema>;
+
+export const claygentConfigSchema = z
+  .object({
+    user_prompt: z.string().trim().min(1, "Prompt is required").max(8000),
+    enhanced_prompt: z.string().trim().max(16_000).nullish(),
+    outputs: z.array(claygentOutputFieldSchema).min(1, "Add at least one output").max(10),
+  })
+  .refine(
+    (config) => {
+      const keys = config.outputs.map((field) => field.key);
+      return new Set(keys).size === keys.length;
+    },
+    { message: "Output keys must be unique", path: ["outputs"] },
+  );
+export type ClaygentConfig = z.infer<typeof claygentConfigSchema>;
+
+export const primitiveColumnCreateSchema = z.object({
+  name: columnNameSchema,
+  type: primitiveColumnTypeSchema,
+});
+
+export const claygentColumnCreateSchema = z.object({
+  name: columnNameSchema,
+  type: z.literal("claygent"),
+  claygent: claygentConfigSchema,
+});
+
+export const columnCreateSchema = z.discriminatedUnion("type", [
+  primitiveColumnCreateSchema,
+  claygentColumnCreateSchema,
+]);
 export type ColumnCreate = z.infer<typeof columnCreateSchema>;
+
+export const claygentExpandRequestSchema = z.object({
+  goal: z.string().trim().min(1, "Prompt is required").max(8000),
+  column_ids: z.array(z.string().uuid()).optional(),
+});
+export type ClaygentExpandRequest = z.infer<typeof claygentExpandRequestSchema>;
+
+export type ClaygentInputColumn = {
+  id: string;
+  name: string;
+};
+
+export type ClaygentExpandResponse = {
+  user_prompt: string;
+  enhanced_prompt: string;
+  outputs: ClaygentOutputField[];
+  input_columns: ClaygentInputColumn[];
+};
 
 export const tableCreateSchema = z.object({
   name: z.string().trim().min(1, "Table name is required").max(200),
-  columns: z.array(columnCreateSchema).optional(),
+  columns: z.array(primitiveColumnCreateSchema).optional(),
 });
 export type TableCreate = z.infer<typeof tableCreateSchema>;
 
@@ -34,7 +96,7 @@ export type ColumnUpdate = z.infer<typeof columnUpdateSchema>;
 export const filterOperatorSchema = z.enum(["eq", "contains", "is_empty"]);
 export type FilterOperator = z.infer<typeof filterOperatorSchema>;
 
-export type CellValue = string | boolean | null;
+export type CellValue = string | boolean | null | Record<string, unknown>;
 export type RowValues = Record<string, CellValue>;
 
 export type TableListItem = {
@@ -56,6 +118,9 @@ export type ColumnResponse = {
   type: ColumnType;
   position: number;
   hidden: boolean;
+  config?: Record<string, unknown> | null;
+  source_column_id?: string | null;
+  source_field?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -162,7 +227,18 @@ export function deleteTable(tableId: string) {
 }
 
 export function addColumn(tableId: string, input: ColumnCreate) {
-  return apiFetch<ColumnResponse>(`/tables/${tableId}/columns`, {
+  return apiFetch<ColumnResponse | TableResponse>(`/tables/${tableId}/columns`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function isTableResponse(value: ColumnResponse | TableResponse): value is TableResponse {
+  return "columns" in value && Array.isArray(value.columns);
+}
+
+export function expandClaygentPrompt(tableId: string, input: ClaygentExpandRequest) {
+  return apiFetch<ClaygentExpandResponse>(`/tables/${tableId}/claygent/prompts/expand`, {
     method: "POST",
     body: JSON.stringify(input),
   });
