@@ -7,6 +7,7 @@ import {
   listRows,
   mutationErrorMessage,
   ROW_PAGE_SIZE,
+  rowsHaveActiveClaygent,
   tableKeys,
   tableUpdateSchema,
   updateTable,
@@ -45,6 +46,14 @@ export function TableDetailPage() {
     queryKey: tableKeys.rows(tableId ?? "", { limit: pagination.pageSize, offset }),
     queryFn: () => listRows(tableId ?? "", { limit: pagination.pageSize, offset }),
     enabled: Boolean(tableId),
+    refetchInterval: (query) => {
+      const items = query.state.data?.items;
+      const columns = tableQuery.data?.columns;
+      if (!items || !columns || !rowsHaveActiveClaygent(items, columns)) {
+        return false;
+      }
+      return 2000;
+    },
   });
 
   if (!tableId) {

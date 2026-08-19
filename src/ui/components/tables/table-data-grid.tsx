@@ -2,11 +2,13 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper, useTable, type PaginationState } from "@tanstack/react-table";
 import {
+  claygentInFlightStatus,
   deleteColumn,
   deleteRow,
   mutationErrorMessage,
   reorderColumns,
   reorderVisibleColumns,
+  startClaygentRun,
   tableKeys,
   updateColumn,
   updateRow,
@@ -17,6 +19,8 @@ import {
 } from "@/lib/tables";
 import { tableGridFeatures, type TableGridFeatures } from "@/ui/components/tables/data-table-features";
 import { BooleanCell, EditableTextCell } from "@/ui/components/tables/editable-cell";
+import { ClaygentCell } from "@/ui/components/tables/claygent-cell";
+import { ClaygentRunDrawer } from "@/ui/components/tables/claygent-run-drawer";
 import { ConfirmDeleteDialog } from "@/ui/components/tables/confirm-delete-dialog";
 import { RenameColumnDialog } from "@/ui/components/tables/rename-column-dialog";
 import { Button } from "@/ui/components/ui/button";
@@ -42,8 +46,11 @@ import {
   ArrowUp01Icon,
   BanIcon,
   MoreVerticalIcon,
-  PlayIcon,
 } from "@hugeicons/core-free-icons";
+
+function claygentRunKey(rowId: string, columnId: string) {
+  return `${rowId}:${columnId}`;
+}
 
 const columnHelper = createColumnHelper<TableGridFeatures, RowResponse>();
 
@@ -89,6 +96,8 @@ export function TableDataGrid({
   const [renameColumn, setRenameColumn] = useState<ColumnResponse | null>(null);
   const [deleteColumnTarget, setDeleteColumnTarget] = useState<ColumnResponse | null>(null);
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
+  const [pendingRuns, setPendingRuns] = useState<Set<string>>(() => new Set());
+  const [inspected, setInspected] = useState<{ rowId: string; columnId: string } | null>(null);
   const draggingIdRef = useRef<string | null>(null);
   const columnsRef = useRef(schemaColumns);
   columnsRef.current = schemaColumns;
@@ -98,6 +107,41 @@ export function TableDataGrid({
       updateRow(tableId, rowId, { values: { [columnId]: value } }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId) });
+    },
+  });
+
+  const runClaygent = useMutation({
+    mutationFn: ({
+      rowId,
+      columnId,
+      overwrite,
+    }: {
+      rowId: string;
+      columnId: string;
+      overwrite: boolean;
+    }) => startClaygentRun(tableId, columnId, { row_ids: [rowId], overwrite }),
+    onMutate: ({ rowId, columnId }) => {
+      const key = claygentRunKey(rowId, columnId);
+      setPendingRuns((current) => {
+        const next = new Set(current);
+        next.add(key);
+        return next;
+      });
+    },
+    onSuccess: async (_run, { rowId, columnId }) => {
+      await queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId) });
+      setPendingRuns((current) => {
+        const next = new Set(current);
+        next.delete(claygentRunKey(rowId, columnId));
+        return next;
+      });
+    },
+    onError: (_error, { rowId, columnId }) => {
+      setPendingRuns((current) => {
+        const next = new Set(current);
+        next.delete(claygentRunKey(rowId, columnId));
+        return next;
+      });
     },
   });
 
@@ -255,10 +299,18 @@ export function TableDataGrid({
             },
             cell: ({ row, getValue }) =>
               column.type === "claygent" ? (
-                <span className="flex h-7 min-w-40 items-center gap-1.5 px-2 text-sm text-muted-foreground">
-                  <HugeiconsIcon icon={PlayIcon} strokeWidth={2} className="size-3.5" />
-                  Run
-                </span>
+                <ClaygentCell
+                  value={getValue()}
+                  pending={pendingRuns.has(claygentRunKey(row.original.id, column.id))}
+                  onRun={() =>
+                    runClaygent.mutate({
+                      rowId: row.original.id,
+                      columnId: column.id,
+                      overwrite: false,
+                    })
+                  }
+                  onOpen={() => setInspected({ rowId: row.original.id, columnId: column.id })}
+                />
               ) : column.type === "boolean" ? (
                 <BooleanCell
                   value={getValue()}
@@ -299,7 +351,7 @@ export function TableDataGrid({
           ),
         }),
       ]),
-    [canHideColumn, canReorder, displayColumns, hideColumn, saveCell],
+    [canHideColumn, canReorder, displayColumns, hideColumn, pendingRuns, runClaygent, saveCell],
   );
 
   const table = useTable({
@@ -317,6 +369,16 @@ export function TableDataGrid({
   const pageIndex = table.state.pagination.pageIndex;
   const showingFrom = total === 0 ? 0 : pageIndex * pagination.pageSize + 1;
   const showingTo = Math.min(total, (pageIndex + 1) * pagination.pageSize);
+  const inspectedColumn = inspected
+    ? schemaColumns.find((column) => column.id === inspected.columnId)
+    : undefined;
+  const inspectedRow = inspected ? rows.find((row) => row.id === inspected.rowId) : undefined;
+  const inspectedInFlight = inspected
+    ? claygentInFlightStatus(
+        inspectedRow?.values[inspected.columnId],
+        pendingRuns.has(claygentRunKey(inspected.rowId, inspected.columnId)),
+      )
+    : null;
 
   if (displayColumns.length === 0) {
     return (
@@ -416,13 +478,14 @@ export function TableDataGrid({
         </Table>
       </div>
 
-      {moveColumns.error || hideColumn.error ? (
+      {moveColumns.error || hideColumn.error || runClaygent.error ? (
         <p className="text-sm text-destructive">
           {mutationErrorMessage(
             moveColumns.error,
             moveColumns.isError ? "Failed to reorder columns" : "",
           ) ||
-            mutationErrorMessage(hideColumn.error, hideColumn.isError ? "Failed to hide column" : "")}
+            mutationErrorMessage(hideColumn.error, hideColumn.isError ? "Failed to hide column" : "") ||
+            mutationErrorMessage(runClaygent.error, runClaygent.isError ? "Failed to run research" : "")}
         </p>
       ) : null}
 
@@ -468,6 +531,50 @@ export function TableDataGrid({
         }}
         tableId={tableId}
         column={renameColumn}
+      />
+
+      <ClaygentRunDrawer
+        open={inspected !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInspected(null);
+            if (!runClaygent.isPending) {
+              runClaygent.reset();
+            }
+          }
+        }}
+        columnName={inspectedColumn?.name ?? "Claygent"}
+        columnId={inspected?.columnId ?? ""}
+        value={inspectedRow?.values[inspected?.columnId ?? ""]}
+        columns={schemaColumns}
+        inFlight={inspectedInFlight}
+        rerunPending={
+          inspected
+            ? runClaygent.isPending &&
+              runClaygent.variables?.rowId === inspected.rowId &&
+              runClaygent.variables?.columnId === inspected.columnId
+            : false
+        }
+        error={
+          inspected &&
+          runClaygent.variables?.rowId === inspected.rowId &&
+          runClaygent.variables?.columnId === inspected.columnId
+            ? mutationErrorMessage(
+                runClaygent.error,
+                runClaygent.isError ? "Failed to run research" : "",
+              )
+            : null
+        }
+        onRerun={() => {
+          if (!inspected) {
+            return;
+          }
+          runClaygent.mutate({
+            rowId: inspected.rowId,
+            columnId: inspected.columnId,
+            overwrite: true,
+          });
+        }}
       />
 
       <ConfirmDeleteDialog

@@ -72,6 +72,64 @@ export type ClaygentExpandResponse = {
   input_columns: ClaygentInputColumn[];
 };
 
+export const claygentCellStatusSchema = z.enum(["queued", "running", "succeeded", "failed"]);
+export type ClaygentCellStatus = z.infer<typeof claygentCellStatusSchema>;
+
+export const claygentConfidenceSchema = z.enum(["high", "medium", "low"]);
+export type ClaygentConfidence = z.infer<typeof claygentConfidenceSchema>;
+
+export const claygentSourceSchema = z.object({
+  url: z.string(),
+  title: z.string().optional().default(""),
+});
+export type ClaygentSource = z.infer<typeof claygentSourceSchema>;
+
+export const claygentCellSchema = z.object({
+  status: claygentCellStatusSchema,
+  confidence: claygentConfidenceSchema.nullish(),
+  confidence_reason: z.string().nullish(),
+  sources: z.array(claygentSourceSchema).optional().default([]),
+  output: z.record(z.string(), z.unknown()).nullish(),
+  error: z.string().nullish(),
+});
+export type ClaygentCell = z.infer<typeof claygentCellSchema>;
+
+export type ClaygentRunCreate = {
+  row_ids?: string[];
+  overwrite?: boolean;
+};
+
+export type ClaygentRunStatus = "queued" | "running" | "succeeded" | "partial" | "failed";
+export type ClaygentRunItemStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
+
+export type ClaygentRunItemResponse = {
+  id: string;
+  row_id: string;
+  status: ClaygentRunItemStatus;
+  error_message: string | null;
+  model_response: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ClaygentRunResponse = {
+  id: string;
+  table_id: string;
+  column_id: string;
+  created_by: string;
+  status: ClaygentRunStatus;
+  row_ids: string[] | null;
+  overwrite: boolean;
+  total_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  skipped_count: number;
+  items: ClaygentRunItemResponse[];
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
 export const tableCreateSchema = z.object({
   name: z.string().trim().min(1, "Table name is required").max(200),
   columns: z.array(primitiveColumnCreateSchema).optional(),
@@ -244,6 +302,13 @@ export function expandClaygentPrompt(tableId: string, input: ClaygentExpandReque
   });
 }
 
+export function startClaygentRun(tableId: string, columnId: string, input: ClaygentRunCreate = {}) {
+  return apiFetch<ClaygentRunResponse>(`/tables/${tableId}/columns/${columnId}/runs`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function updateColumn(tableId: string, columnId: string, input: ColumnUpdate) {
   return apiFetch<ColumnResponse>(`/tables/${tableId}/columns/${columnId}`, {
     method: "PATCH",
@@ -405,6 +470,41 @@ export function buildTableFilter(input: {
       value: input.value.trim(),
     },
   };
+}
+
+export function parseClaygentCell(value: CellValue | undefined): ClaygentCell | null {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const parsed = claygentCellSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+export function claygentCellIsActive(value: CellValue | undefined): boolean {
+  const status = parseClaygentCell(value)?.status;
+  return status === "queued" || status === "running";
+}
+
+export function claygentInFlightStatus(
+  value: CellValue | undefined,
+  pending = false,
+): "queued" | "running" | null {
+  if (pending) {
+    return "queued";
+  }
+  const status = parseClaygentCell(value)?.status;
+  if (status === "queued" || status === "running") {
+    return status;
+  }
+  return null;
+}
+
+export function rowsHaveActiveClaygent(rows: RowResponse[], columns: ColumnResponse[]): boolean {
+  const claygentIds = columns.filter((column) => column.type === "claygent").map((column) => column.id);
+  if (claygentIds.length === 0) {
+    return false;
+  }
+  return rows.some((row) => claygentIds.some((columnId) => claygentCellIsActive(row.values[columnId])));
 }
 
 export function orderedColumns(columns: ColumnResponse[]): ColumnResponse[] {
