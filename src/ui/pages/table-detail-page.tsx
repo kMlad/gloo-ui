@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PaginationState } from "@tanstack/react-table";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getTable,
   listRows,
@@ -25,16 +24,15 @@ import { Add01Icon, ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 export function TableDetailPage() {
   const { tableId } = useParams();
   const [addColumnOpen, setAddColumnOpen] = useState(false);
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: ROW_PAGE_SIZE,
-  });
+  const [activePageIndexes, setActivePageIndexes] = useState([0]);
+  const [knownTotal, setKnownTotal] = useState<number | null>(null);
+  const [rowsResetKey, setRowsResetKey] = useState(0);
 
   useEffect(() => {
-    setPagination({ pageIndex: 0, pageSize: ROW_PAGE_SIZE });
+    setActivePageIndexes([0]);
+    setKnownTotal(null);
+    setRowsResetKey((current) => current + 1);
   }, [tableId]);
-
-  const offset = pagination.pageIndex * pagination.pageSize;
 
   const tableQuery = useQuery({
     queryKey: tableKeys.detail(tableId ?? ""),
@@ -42,19 +40,62 @@ export function TableDetailPage() {
     enabled: Boolean(tableId),
   });
 
-  const rowsQuery = useQuery({
-    queryKey: tableKeys.rows(tableId ?? "", { limit: pagination.pageSize, offset }),
-    queryFn: () => listRows(tableId ?? "", { limit: pagination.pageSize, offset }),
-    enabled: Boolean(tableId),
-    refetchInterval: (query) => {
-      const items = query.state.data?.items;
-      const columns = tableQuery.data?.columns;
-      if (!items || !columns || !rowsHaveActiveSheriff(items, columns)) {
-        return false;
-      }
-      return 2000;
-    },
+  const rowsQueries = useQueries({
+    queries: activePageIndexes.map((pageIndex) => {
+      const offset = pageIndex * ROW_PAGE_SIZE;
+      return {
+        queryKey: tableKeys.rows(tableId ?? "", { limit: ROW_PAGE_SIZE, offset }),
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          listRows(tableId ?? "", { limit: ROW_PAGE_SIZE, offset, signal }),
+        enabled: Boolean(tableId),
+        // Page queries are a bounded viewport cache. Once a page leaves the
+        // active window, release its rows rather than retaining all 10k records.
+        gcTime: 0,
+        refetchInterval: (query: { state: { data?: Awaited<ReturnType<typeof listRows>> } }) => {
+          const items = query.state.data?.items;
+          const columns = tableQuery.data?.columns;
+          if (!items || !columns || !rowsHaveActiveSheriff(items, columns)) {
+            return false;
+          }
+          return 2000;
+        },
+      };
+    }),
   });
+
+  const totalFromResults = rowsQueries.find((query) => query.data)?.data?.total;
+
+  useEffect(() => {
+    if (totalFromResults !== undefined) {
+      setKnownTotal(totalFromResults);
+    }
+  }, [totalFromResults]);
+
+  const handleVisibleRangeChange = useCallback(
+    (startIndex: number, endIndex: number) => {
+      if (knownTotal === null || knownTotal === 0) {
+        return;
+      }
+
+      const lastPageIndex = Math.max(0, Math.ceil(knownTotal / ROW_PAGE_SIZE) - 1);
+      const firstNeeded = Math.max(0, Math.floor(startIndex / ROW_PAGE_SIZE) - 1);
+      const lastNeeded = Math.min(
+        lastPageIndex,
+        Math.floor(endIndex / ROW_PAGE_SIZE) + 1,
+      );
+      const next = Array.from(
+        { length: lastNeeded - firstNeeded + 1 },
+        (_, index) => firstNeeded + index,
+      );
+
+      setActivePageIndexes((current) =>
+        current.length === next.length && current.every((page, index) => page === next[index])
+          ? current
+          : next,
+      );
+    },
+    [knownTotal],
+  );
 
   if (!tableId) {
     return (
@@ -65,11 +106,14 @@ export function TableDetailPage() {
   }
 
   const table = tableQuery.data;
-  const rows = rowsQuery.data?.items ?? [];
-  const total = rowsQuery.data?.total ?? 0;
+  const rowPages = rowsQueries.flatMap((query) => (query.data ? [query.data] : []));
+  const total = knownTotal ?? 0;
+  const rowsPending = knownTotal === null && rowsQueries.some((query) => query.isPending);
+  const rowsFetching = rowsQueries.some((query) => query.isFetching);
+  const rowsError = rowsQueries.find((query) => query.isError)?.error;
   const loadError =
     mutationErrorMessage(tableQuery.error, tableQuery.isError ? "Failed to load table" : "") ||
-    mutationErrorMessage(rowsQuery.error, rowsQuery.isError ? "Failed to load rows" : "");
+    mutationErrorMessage(rowsError, rowsError ? "Failed to load rows" : "");
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-x-hidden p-6 md:p-8">
@@ -115,13 +159,17 @@ export function TableDetailPage() {
             tableId={table.id}
             columns={table.columns}
             filters={table.filters}
-            onFiltersSaved={() => setPagination((current) => ({ ...current, pageIndex: 0 }))}
+            onFiltersSaved={() => {
+              setActivePageIndexes([0]);
+              setKnownTotal(null);
+              setRowsResetKey((current) => current + 1);
+            }}
           />
           <HiddenColumnsMenu tableId={table.id} columns={table.columns} />
         </div>
       ) : null}
 
-      {tableQuery.isPending || rowsQuery.isPending ? (
+      {tableQuery.isPending || rowsPending ? (
         <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card p-4">
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-full" />
@@ -136,11 +184,12 @@ export function TableDetailPage() {
         <TableDataGrid
           tableId={table.id}
           columns={table.columns}
-          rows={rows}
+          rowPages={rowPages}
           total={total}
-          pagination={pagination}
+          isFetchingRows={rowsFetching}
+          resetKey={rowsResetKey}
           filterActive={table.filters.length > 0}
-          onPaginationChange={setPagination}
+          onVisibleRangeChange={handleVisibleRangeChange}
         />
       ) : null}
 

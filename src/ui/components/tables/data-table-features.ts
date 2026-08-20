@@ -1,6 +1,5 @@
 import {
   createSortedRowModel,
-  rowPaginationFeature,
   rowSortingFeature,
   sortFn_text,
   tableFeatures,
@@ -15,7 +14,6 @@ export const tableListFeatures = tableFeatures({
 export type TableListFeatures = typeof tableListFeatures;
 
 export const tableGridFeatures = tableFeatures({
-  rowPaginationFeature,
   rowSortingFeature,
   sortedRowModel: createSortedRowModel(),
   sortFns: { text: sortFn_text },

@@ -225,6 +225,7 @@ export type RowUpdate = {
 export type ListRowsParams = {
   limit?: number;
   offset?: number;
+  signal?: AbortSignal;
 };
 
 export const tableKeys = {
@@ -338,7 +339,9 @@ export function listRows(tableId: string, params: ListRowsParams = {}) {
     search.set("offset", String(params.offset));
   }
   const query = search.toString();
-  return apiFetch<RowListResponse>(`/tables/${tableId}/rows${query ? `?${query}` : ""}`);
+  return apiFetch<RowListResponse>(`/tables/${tableId}/rows${query ? `?${query}` : ""}`, {
+    signal: params.signal,
+  });
 }
 
 export function addRow(tableId: string, input: RowCreate = {}) {

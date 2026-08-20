@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createColumnHelper, useTable, type PaginationState } from "@tanstack/react-table";
+import { createColumnHelper, useTable } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   sheriffInFlightStatus,
   deleteColumn,
@@ -15,6 +16,7 @@ import {
   visibleColumns,
   type ColumnResponse,
   type RowResponse,
+  type RowListResponse,
   type TableResponse,
 } from "@/lib/tables";
 import { tableGridFeatures, type TableGridFeatures } from "@/ui/components/tables/data-table-features";
@@ -109,21 +111,25 @@ function clearColumnDragMarks(from: EventTarget | null) {
 type TableDataGridProps = {
   tableId: string;
   columns: ColumnResponse[];
-  rows: RowResponse[];
+  rowPages: RowListResponse[];
   total: number;
-  pagination: PaginationState;
+  isFetchingRows?: boolean;
+  resetKey?: number;
   filterActive?: boolean;
-  onPaginationChange: (updater: PaginationState | ((old: PaginationState) => PaginationState)) => void;
+  onVisibleRangeChange: (startIndex: number, endIndex: number) => void;
 };
+
+const virtualRowEstimate = 44;
 
 export function TableDataGrid({
   tableId,
   columns: schemaColumns,
-  rows,
+  rowPages,
   total,
-  pagination,
+  isFetchingRows = false,
+  resetKey = 0,
   filterActive = false,
-  onPaginationChange,
+  onVisibleRangeChange,
 }: TableDataGridProps) {
   const queryClient = useQueryClient();
   const [renameColumn, setRenameColumn] = useState<ColumnResponse | null>(null);
@@ -136,7 +142,21 @@ export function TableDataGrid({
   const sheriffAnchorRef = useRef<SheriffAnchor | null>(null);
   const orderedRowIdsRef = useRef<string[]>([]);
   const columnsRef = useRef(schemaColumns);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   columnsRef.current = schemaColumns;
+
+  const { rows, rowByVirtualIndex, virtualIndexByRowId } = useMemo(() => {
+    const indexedRows = new Map<number, RowResponse>();
+    for (const page of rowPages) {
+      page.items.forEach((row, index) => indexedRows.set(page.offset + index, row));
+    }
+    const orderedEntries = [...indexedRows.entries()].sort(([left], [right]) => left - right);
+    return {
+      rows: orderedEntries.map(([, row]) => row),
+      rowByVirtualIndex: indexedRows,
+      virtualIndexByRowId: new Map(orderedEntries.map(([index, row]) => [row.id, index])),
+    };
+  }, [rowPages]);
 
   const saveCell = useMutation({
     mutationFn: ({ rowId, columnId, value }: { rowId: string; columnId: string; value: string | boolean | null }) =>
@@ -297,14 +317,17 @@ export function TableDataGrid({
           header: () => <span aria-label="Row number">#</span>,
           cell: ({ row }) => (
             <span className="tabular-nums text-muted-foreground">
-              {pagination.pageIndex * pagination.pageSize + row.index + 1}
+              {(virtualIndexByRowId.get(row.original.id) ?? row.index) + 1}
             </span>
           ),
         }),
         ...displayColumns.map((column) =>
           columnHelper.accessor((row) => row.values[column.id] ?? null, {
             id: column.id,
-            enableSorting: column.type !== "sheriff",
+            // Client-side sorting would only sort the bounded viewport cache,
+            // not the complete server result set. Re-enable this with a
+            // server-side sort parameter when the rows API supports one.
+            enableSorting: false,
             header: ({ header }) => {
               const canSort = header.column.getCanSort();
               const sorted = header.column.getIsSorted();
@@ -448,7 +471,7 @@ export function TableDataGrid({
           ),
         }),
       ]),
-    [canHideColumn, canReorder, displayColumns, hideColumn, pagination.pageIndex, pagination.pageSize, pendingRuns, runSheriff, saveCell],
+    [canHideColumn, canReorder, displayColumns, hideColumn, pendingRuns, runSheriff, saveCell, virtualIndexByRowId],
   );
 
   const table = useTable({
@@ -456,17 +479,42 @@ export function TableDataGrid({
     columns: tableColumns,
     data: rows,
     getRowId: (row) => row.id,
-    manualPagination: true,
-    rowCount: total,
-    state: { pagination },
-    onPaginationChange,
   });
 
-  orderedRowIdsRef.current = table.getRowModel().rows.map((row) => row.id);
+  const tableRowsById = new Map(table.getRowModel().rows.map((row) => [row.id, row]));
+  orderedRowIdsRef.current = [...rowByVirtualIndex.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, row]) => row.id);
+
+  const rowVirtualizer = useVirtualizer({
+    count: total,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => virtualRowEstimate,
+    overscan: 12,
+    getItemKey: (index) => index,
+    // React 19 can warn when flushSync runs inside lifecycle work. Slightly
+    // delayed measurement is preferable here and keeps fast scrolling smooth.
+    useFlushSync: false,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const firstVirtualIndex = virtualRows[0]?.index ?? 0;
+  const lastVirtualIndex = virtualRows.at(-1)?.index ?? 0;
+  const topPadding = virtualRows[0]?.start ?? 0;
+  const bottomPadding = Math.max(
+    0,
+    rowVirtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0),
+  );
 
   useEffect(() => {
+    if (total > 0) {
+      onVisibleRangeChange(firstVirtualIndex, lastVirtualIndex);
+    }
+  }, [firstVirtualIndex, lastVirtualIndex, onVisibleRangeChange, total]);
+
+  useEffect(() => {
+    rowVirtualizer.scrollToOffset(0);
     clearSheriffSelection();
-  }, [pagination.pageIndex, pagination.pageSize, tableId]);
+  }, [resetKey, rowVirtualizer, tableId]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -497,10 +545,6 @@ export function TableDataGrid({
     };
   }, []);
 
-  const pageCount = table.getPageCount();
-  const pageIndex = table.state.pagination.pageIndex;
-  const showingFrom = total === 0 ? 0 : pageIndex * pagination.pageSize + 1;
-  const showingTo = Math.min(total, (pageIndex + 1) * pagination.pageSize);
   const inspectedColumn = inspected
     ? schemaColumns.find((column) => column.id === inspected.columnId)
     : undefined;
@@ -524,8 +568,11 @@ export function TableDataGrid({
   return (
     <>
       <div className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card">
-        <Table>
-          <TableHeader>
+        <Table
+          containerRef={scrollContainerRef}
+          containerClassName="max-h-[70vh] overflow-auto"
+        >
+          <TableHeader className="sticky top-0 z-30 bg-card [&_tr]:bg-card">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -589,75 +636,136 @@ export function TableDataGrid({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="group">
-                  {row.getAllCells().map((cell) => {
-                    if (cell.column.id === "row-number") {
-                      return (
-                        <TableCell key={cell.id} className={rowNumberColumnClass}>
-                          <table.FlexRender cell={cell} />
-                        </TableCell>
-                      );
-                    }
+            {total > 0 ? (
+              <>
+                {topPadding > 0 ? (
+                  <TableRow aria-hidden="true" className="border-0 hover:bg-transparent">
+                    <TableCell
+                      colSpan={tableColumns.length}
+                      className="border-0 p-0"
+                      style={{ height: topPadding }}
+                    />
+                  </TableRow>
+                ) : null}
+                {virtualRows.map((virtualRow) => {
+                  const rowData = rowByVirtualIndex.get(virtualRow.index);
+                  const row = rowData ? tableRowsById.get(rowData.id) : undefined;
 
-                    const schemaColumn = schemaColumns.find((column) => column.id === cell.column.id);
-                    if (schemaColumn?.type === "sheriff") {
-                      const selected =
-                        sheriffSelection?.columnId === schemaColumn.id &&
-                        sheriffSelection.rowIds.includes(row.original.id);
-                      const selectedCount = selected ? sheriffSelection.rowIds.length : 1;
-                      return (
-                        <TableCell
-                          key={cell.id}
-                          data-sheriff-cell=""
-                          aria-selected={selected || undefined}
-                          className={cn(
-                            "p-0",
-                            selected && "bg-primary/10 ring-1 ring-inset ring-primary/25",
-                          )}
-                          onMouseDown={(event) => {
-                            if (event.button !== 0) {
-                              return;
-                            }
-                            if (event.shiftKey) {
-                              event.preventDefault();
-                            }
-                            handleSheriffPointer(event, row.original.id, schemaColumn.id);
-                          }}
-                        >
-                          <ContextMenu
-                            onOpenChange={(open) => {
-                              if (open) {
-                                handleSheriffContextOpen(row.original.id, schemaColumn.id);
-                              }
-                            }}
-                          >
-                            <ContextMenuTrigger className="block select-none p-2">
-                              <table.FlexRender cell={cell} />
-                            </ContextMenuTrigger>
-                            <ContextMenuContent>
-                              <ContextMenuItem
-                                disabled={runSheriff.isPending}
-                                onClick={() => runSelectedSheriffCells(row.original.id, schemaColumn.id)}
-                              >
-                                <HugeiconsIcon icon={PlayIcon} strokeWidth={2} />
-                                Run {selectedCount} selected {selectedCount === 1 ? "cell" : "cells"}
-                              </ContextMenuItem>
-                            </ContextMenuContent>
-                          </ContextMenu>
-                        </TableCell>
-                      );
-                    }
-
+                  if (!row) {
                     return (
-                      <TableCell key={cell.id}>
-                        <table.FlexRender cell={cell} />
-                      </TableCell>
+                      <TableRow
+                        key={virtualRow.key}
+                        ref={rowVirtualizer.measureElement}
+                        data-index={virtualRow.index}
+                        aria-busy="true"
+                        className="h-11 hover:bg-transparent"
+                      >
+                        <TableCell className={rowNumberColumnClass}>
+                          <span className="tabular-nums text-muted-foreground">
+                            {virtualRow.index + 1}
+                          </span>
+                        </TableCell>
+                        {displayColumns.map((column) => (
+                          <TableCell key={column.id}>
+                            <span className="block h-3.5 w-24 animate-pulse rounded bg-muted" />
+                          </TableCell>
+                        ))}
+                        <TableCell>
+                          <span className="sr-only">Loading row</span>
+                        </TableCell>
+                      </TableRow>
                     );
-                  })}
-                </TableRow>
-              ))
+                  }
+
+                  return (
+                    <TableRow
+                      key={virtualRow.key}
+                      ref={rowVirtualizer.measureElement}
+                      data-index={virtualRow.index}
+                      className="group h-11"
+                    >
+                      {row.getAllCells().map((cell) => {
+                        if (cell.column.id === "row-number") {
+                          return (
+                            <TableCell key={cell.id} className={rowNumberColumnClass}>
+                              <table.FlexRender cell={cell} />
+                            </TableCell>
+                          );
+                        }
+
+                        const schemaColumn = schemaColumns.find(
+                          (column) => column.id === cell.column.id,
+                        );
+                        if (schemaColumn?.type === "sheriff") {
+                          const selected =
+                            sheriffSelection?.columnId === schemaColumn.id &&
+                            sheriffSelection.rowIds.includes(row.original.id);
+                          const selectedCount = selected ? sheriffSelection.rowIds.length : 1;
+                          return (
+                            <TableCell
+                              key={cell.id}
+                              data-sheriff-cell=""
+                              aria-selected={selected || undefined}
+                              className={cn(
+                                "p-0",
+                                selected && "bg-primary/10 ring-1 ring-inset ring-primary/25",
+                              )}
+                              onMouseDown={(event) => {
+                                if (event.button !== 0) {
+                                  return;
+                                }
+                                if (event.shiftKey) {
+                                  event.preventDefault();
+                                }
+                                handleSheriffPointer(event, row.original.id, schemaColumn.id);
+                              }}
+                            >
+                              <ContextMenu
+                                onOpenChange={(open) => {
+                                  if (open) {
+                                    handleSheriffContextOpen(row.original.id, schemaColumn.id);
+                                  }
+                                }}
+                              >
+                                <ContextMenuTrigger className="block select-none p-2">
+                                  <table.FlexRender cell={cell} />
+                                </ContextMenuTrigger>
+                                <ContextMenuContent>
+                                  <ContextMenuItem
+                                    disabled={runSheriff.isPending}
+                                    onClick={() =>
+                                      runSelectedSheriffCells(row.original.id, schemaColumn.id)
+                                    }
+                                  >
+                                    <HugeiconsIcon icon={PlayIcon} strokeWidth={2} />
+                                    Run {selectedCount} selected{" "}
+                                    {selectedCount === 1 ? "cell" : "cells"}
+                                  </ContextMenuItem>
+                                </ContextMenuContent>
+                              </ContextMenu>
+                            </TableCell>
+                          );
+                        }
+
+                        return (
+                          <TableCell key={cell.id}>
+                            <table.FlexRender cell={cell} />
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })}
+                {bottomPadding > 0 ? (
+                  <TableRow aria-hidden="true" className="border-0 hover:bg-transparent">
+                    <TableCell
+                      colSpan={tableColumns.length}
+                      className="border-0 p-0"
+                      style={{ height: bottomPadding }}
+                    />
+                  </TableRow>
+                ) : null}
+              </>
             ) : (
               <TableRow>
                 <TableCell colSpan={tableColumns.length} className="h-24 text-center text-muted-foreground">
@@ -688,31 +796,11 @@ export function TableDataGrid({
             ? filterActive
               ? "0 rows match filters"
               : "0 rows"
-            : `${showingFrom}–${showingTo} of ${total} rows${filterActive ? " (filtered)" : ""}`}
+            : `${total} rows${filterActive ? " (filtered)" : ""}`}
         </p>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!table.getCanPreviousPage()}
-            onClick={() => table.previousPage()}
-          >
-            Previous
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Page {pageCount === 0 ? 0 : pageIndex + 1} of {pageCount}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!table.getCanNextPage()}
-            onClick={() => table.nextPage()}
-          >
-            Next
-          </Button>
-        </div>
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {isFetchingRows ? "Loading rows…" : `${rows.length} rows cached near the viewport`}
+        </p>
       </div>
 
       <RenameColumnDialog
