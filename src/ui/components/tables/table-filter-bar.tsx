@@ -65,7 +65,7 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
         {filters.map((filter, index) => {
           if (editor?.mode === "edit" && editor.index === index) {
             return (
@@ -86,12 +86,12 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
           const column = columnsById.get(filter.column_id);
           const valueLabel = formatFilterValue(filter);
           return (
-            <span key={`${filter.column_id}-${index}`} className="inline-flex items-center">
+            <span key={`${filter.column_id}-${index}`} className="inline-flex shrink-0 items-center">
               {index > 0 ? <span className="mr-1.5 text-xs text-muted-foreground">and</span> : null}
               <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/40">
                 <button
                   type="button"
-                  className="inline-flex max-w-72 items-center gap-1 rounded-l-full py-1 pr-1 pl-2.5 text-left text-xs hover:bg-muted/80"
+                  className="inline-flex max-w-72 items-center gap-1 rounded-l-full py-0.5 pr-1 pl-2.5 text-left text-xs hover:bg-muted/80"
                   onClick={() => setEditor({ mode: "edit", index })}
                 >
                   <span className="truncate font-medium text-foreground">{column?.name ?? "Unknown column"}</span>
@@ -103,7 +103,7 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
                 <button
                   type="button"
                   aria-label="Remove filter"
-                  className="rounded-r-full px-1.5 py-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                  className="rounded-r-full px-1.5 py-0.5 text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                   disabled={save.isPending}
                   onClick={() => persist(filters.filter((_, current) => current !== index))}
                 >
@@ -211,7 +211,7 @@ function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: 
 
   return (
     <div
-      className="inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-border/70 bg-card px-2 py-1.5"
+      className="inline-flex shrink-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/70 bg-card px-2 py-1.5"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();

@@ -14,7 +14,7 @@ import {
 } from "@hugeicons/core-free-icons";
 
 const cellClass =
-  "flex h-7 min-w-40 max-w-80 items-center gap-1.5 rounded-md px-2 text-sm";
+  "flex h-6 w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-xs";
 
 type SheriffCellProps = {
   value: CellValue;

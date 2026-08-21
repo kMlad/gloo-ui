@@ -44,7 +44,7 @@ export function EditableTextCell({ value, disabled = false, onSave }: EditableTe
         ref={inputRef}
         value={draft}
         disabled={disabled}
-        className="h-7 min-w-40 rounded-md px-2 text-sm"
+        className="h-6 w-full min-w-0 rounded-md px-1.5 text-xs"
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
         onKeyDown={(event) => {
@@ -65,7 +65,7 @@ export function EditableTextCell({ value, disabled = false, onSave }: EditableTe
     <button
       type="button"
       disabled={disabled}
-      className="flex h-7 min-w-40 max-w-80 items-center rounded-md px-2 text-left text-sm hover:bg-muted/70 disabled:opacity-50"
+      className="flex h-6 w-full min-w-0 items-center rounded-md px-1.5 text-left text-xs hover:bg-muted/70 disabled:opacity-50"
       onClick={(event) => {
         if (event.detail === 0) {
           setEditing(true);

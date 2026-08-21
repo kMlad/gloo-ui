@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,6 +11,7 @@ import {
   tableUpdateSchema,
   updateTable,
 } from "@/lib/tables";
+import { useAppHeader } from "@/ui/layouts/app-layout";
 import { AddColumnDrawer } from "@/ui/components/tables/add-column-drawer";
 import { HiddenColumnsMenu } from "@/ui/components/tables/hidden-columns-menu";
 import { TableDataGrid } from "@/ui/components/tables/table-data-grid";
@@ -79,10 +80,7 @@ export function TableDetailPage() {
 
       const lastPageIndex = Math.max(0, Math.ceil(knownTotal / ROW_PAGE_SIZE) - 1);
       const firstNeeded = Math.max(0, Math.floor(startIndex / ROW_PAGE_SIZE) - 1);
-      const lastNeeded = Math.min(
-        lastPageIndex,
-        Math.floor(endIndex / ROW_PAGE_SIZE) + 1,
-      );
+      const lastNeeded = Math.min(lastPageIndex, Math.floor(endIndex / ROW_PAGE_SIZE) + 1);
       const next = Array.from(
         { length: lastNeeded - firstNeeded + 1 },
         (_, index) => firstNeeded + index,
@@ -97,6 +95,51 @@ export function TableDetailPage() {
     [knownTotal],
   );
 
+  const table = tableQuery.data;
+  const total = knownTotal ?? 0;
+  const headerContent = useMemo(
+    () =>
+      tableId ? (
+        <>
+          <Link
+            to="/tables"
+            aria-label="Back to tables"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          >
+            <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} className="size-3.5" />
+          </Link>
+
+          <div className="flex min-w-0 shrink items-center gap-2">
+            {tableQuery.isPending ? (
+              <Skeleton className="h-4 w-32" />
+            ) : table ? (
+              <TableTitle tableId={table.id} name={table.name} />
+            ) : (
+              <span className="truncate text-sm font-medium tracking-tight text-foreground">
+                Table
+              </span>
+            )}
+
+            <span className="hidden shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:inline">
+              {table
+                ? `${table.columns.filter((column) => !column.hidden).length} cols · ${total} rows${
+                    table.filters.length > 0 ? " (filtered)" : ""
+                  }`
+                : "Loading…"}
+            </span>
+          </div>
+
+          {table && table.columns.length > 0 ? (
+            <div className="ml-auto shrink-0">
+              <HiddenColumnsMenu tableId={table.id} columns={table.columns} />
+            </div>
+          ) : null}
+        </>
+      ) : null,
+    [table, tableId, tableQuery.isPending, total],
+  );
+  useAppHeader(headerContent);
+
   if (!tableId) {
     return (
       <div className="p-6 md:p-8">
@@ -105,56 +148,17 @@ export function TableDetailPage() {
     );
   }
 
-  const table = tableQuery.data;
   const rowPages = rowsQueries.flatMap((query) => (query.data ? [query.data] : []));
-  const total = knownTotal ?? 0;
   const rowsPending = knownTotal === null && rowsQueries.some((query) => query.isPending);
-  const rowsFetching = rowsQueries.some((query) => query.isFetching);
   const rowsError = rowsQueries.find((query) => query.isError)?.error;
   const loadError =
     mutationErrorMessage(tableQuery.error, tableQuery.isError ? "Failed to load table" : "") ||
     mutationErrorMessage(rowsError, rowsError ? "Failed to load rows" : "");
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-x-hidden p-6 md:p-8">
-      <div className="flex flex-col gap-4">
-        <Link
-          to="/tables"
-          className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} className="size-3.5" />
-          Tables
-        </Link>
-
-        {tableQuery.isPending ? (
-          <Skeleton className="h-8 w-48" />
-        ) : table ? (
-          <TableTitle tableId={table.id} name={table.name} />
-        ) : (
-          <h1 className="m-0 text-2xl font-semibold tracking-tight text-foreground">Table</h1>
-        )}
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {table
-              ? `${table.columns.filter((column) => !column.hidden).length} columns · ${total} rows${
-                  table.filters.length > 0 ? " (filtered)" : ""
-                }`
-              : "Loading schema and rows."}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" onClick={() => setAddColumnOpen(true)}>
-              <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
-              Add column
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
-
-      {table && table.columns.length > 0 ? (
-        <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 md:px-6">
+        {table && table.columns.length > 0 ? (
           <TableFilterBar
             tableId={table.id}
             columns={table.columns}
@@ -165,33 +169,45 @@ export function TableDetailPage() {
               setRowsResetKey((current) => current + 1);
             }}
           />
-          <HiddenColumnsMenu tableId={table.id} columns={table.columns} />
-        </div>
-      ) : null}
+        ) : null}
 
-      {tableQuery.isPending || rowsPending ? (
-        <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card p-4">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-2/3" />
-        </div>
-      ) : table && table.columns.length === 0 ? (
-        <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/30 p-8">
-          <p className="text-sm font-medium text-foreground">This table has no columns</p>
-          <p className="text-sm text-muted-foreground">Add a column before you can add rows.</p>
-        </div>
-      ) : table ? (
-        <TableDataGrid
-          tableId={table.id}
-          columns={table.columns}
-          rowPages={rowPages}
-          total={total}
-          isFetchingRows={rowsFetching}
-          resetKey={rowsResetKey}
-          filterActive={table.filters.length > 0}
-          onVisibleRangeChange={handleVisibleRangeChange}
-        />
-      ) : null}
+        <Button
+          type="button"
+          size="sm"
+          className="ml-auto shrink-0"
+          onClick={() => setAddColumnOpen(true)}
+        >
+          <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
+          Add column
+        </Button>
+
+        {loadError ? <p className="basis-full text-xs text-destructive">{loadError}</p> : null}
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col px-4 pb-1 md:px-6">
+        {tableQuery.isPending || rowsPending ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card p-4">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-2/3" />
+          </div>
+        ) : table && table.columns.length === 0 ? (
+          <div className="flex min-h-40 flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/30 p-8">
+            <p className="text-sm font-medium text-foreground">This table has no columns</p>
+            <p className="text-sm text-muted-foreground">Add a column before you can add rows.</p>
+          </div>
+        ) : table ? (
+          <TableDataGrid
+            tableId={table.id}
+            columns={table.columns}
+            rowPages={rowPages}
+            total={total}
+            resetKey={rowsResetKey}
+            filterActive={table.filters.length > 0}
+            onVisibleRangeChange={handleVisibleRangeChange}
+          />
+        ) : null}
+      </div>
 
       <AddColumnDrawer
         open={addColumnOpen}
@@ -244,7 +260,7 @@ function TableTitle({ tableId, name }: { tableId: string; name: string }) {
         <Input
           value={draft}
           disabled={rename.isPending}
-          className="h-10 rounded-lg px-3 text-lg font-semibold"
+          className="h-6 rounded-md px-2 text-sm font-medium"
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
@@ -272,10 +288,12 @@ function TableTitle({ tableId, name }: { tableId: string; name: string }) {
   return (
     <button
       type="button"
-      className="w-fit rounded-md text-left hover:bg-muted/50"
+      className="min-w-0 max-w-64 rounded-md px-1 text-left hover:bg-muted/50"
       onClick={() => setEditing(true)}
     >
-      <h1 className="m-0 text-2xl font-semibold tracking-tight text-foreground">{name}</h1>
+      <span className="block truncate text-sm font-medium tracking-tight text-foreground">
+        {name}
+      </span>
     </button>
   );
 }

@@ -83,9 +83,22 @@ function rowIdsBetween(orderedRowIds: string[], fromId: string, toId: string) {
 }
 
 const rowNumberColumnClass =
-  "sticky left-0 z-10 w-12 min-w-12 select-none border-r bg-card px-1 text-center group-hover:bg-muted/50";
+  "sticky left-0 z-10 w-12 min-w-12 select-none border-r bg-card px-1 py-1 text-center group-hover:bg-muted/50";
 const rowNumberHeaderClass =
-  "sticky left-0 z-20 w-12 min-w-12 select-none border-r bg-card px-1 text-center";
+  "sticky left-0 z-20 w-12 min-w-12 select-none border-r bg-muted px-1 text-center";
+
+const rowNumberColumnWidth = 48;
+const rowActionsColumnWidth = 44;
+
+function dataColumnWidth(column: ColumnResponse) {
+  if (column.type === "boolean") {
+    return 88;
+  }
+  if (column.type === "sheriff") {
+    return 144;
+  }
+  return 160;
+}
 
 const columnHelper = createColumnHelper<TableGridFeatures, RowResponse>();
 
@@ -113,20 +126,18 @@ type TableDataGridProps = {
   columns: ColumnResponse[];
   rowPages: RowListResponse[];
   total: number;
-  isFetchingRows?: boolean;
   resetKey?: number;
   filterActive?: boolean;
   onVisibleRangeChange: (startIndex: number, endIndex: number) => void;
 };
 
-const virtualRowEstimate = 44;
+const virtualRowEstimate = 36;
 
 export function TableDataGrid({
   tableId,
   columns: schemaColumns,
   rowPages,
   total,
-  isFetchingRows = false,
   resetKey = 0,
   filterActive = false,
   onVisibleRangeChange,
@@ -262,6 +273,13 @@ export function TableDataGrid({
   });
 
   const displayColumns = useMemo(() => visibleColumns(schemaColumns), [schemaColumns]);
+  const gridWidth = useMemo(
+    () =>
+      rowNumberColumnWidth +
+      displayColumns.reduce((totalWidth, column) => totalWidth + dataColumnWidth(column), 0) +
+      rowActionsColumnWidth,
+    [displayColumns],
+  );
   const canHideColumn = displayColumns.length > 1;
   const canReorder = displayColumns.length > 1;
 
@@ -332,15 +350,15 @@ export function TableDataGrid({
               const canSort = header.column.getCanSort();
               const sorted = header.column.getIsSorted();
               return (
-                <div className="flex items-center gap-1">
+                <div className="flex min-w-0 items-center gap-1">
                   <span
                     draggable={canReorder}
                     aria-label={canReorder ? `Reorder ${column.name}` : undefined}
-                    className={
-                      canReorder
-                        ? "cursor-grab touch-none select-none active:cursor-grabbing"
-                        : undefined
-                    }
+                    className={cn(
+                      "min-w-0 flex-1 truncate",
+                      canReorder &&
+                        "cursor-grab touch-none select-none active:cursor-grabbing",
+                    )}
                     onDragStart={
                       canReorder
                         ? (event) => {
@@ -567,12 +585,21 @@ export function TableDataGrid({
 
   return (
     <>
-      <div className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card">
         <Table
           containerRef={scrollContainerRef}
-          containerClassName="max-h-[70vh] overflow-auto"
+          containerClassName="min-h-0 flex-1 overflow-auto"
+          className="table-fixed"
+          style={{ width: gridWidth, minWidth: "100%" }}
         >
-          <TableHeader className="sticky top-0 z-30 bg-card [&_tr]:bg-card">
+          <colgroup>
+            <col style={{ width: rowNumberColumnWidth }} />
+            {displayColumns.map((column) => (
+              <col key={column.id} style={{ width: dataColumnWidth(column) }} />
+            ))}
+            <col style={{ width: rowActionsColumnWidth }} />
+          </colgroup>
+          <TableHeader className="sticky top-0 z-30 bg-muted [&_tr]:bg-muted">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -583,9 +610,11 @@ export function TableDataGrid({
                       key={header.id}
                       data-column-head={isColumnHeader ? header.id : undefined}
                       className={cn(
+                        "h-8",
                         isRowNumber && rowNumberHeaderClass,
                         isColumnHeader &&
-                          "data-[dragging=true]:opacity-50 data-[drop-target=true]:shadow-[inset_2px_0_0_0_currentColor]",
+                          "min-w-0 overflow-hidden px-1.5 data-[dragging=true]:opacity-50 data-[drop-target=true]:shadow-[inset_2px_0_0_0_currentColor]",
+                        header.id === "row-actions" && "w-11 px-1",
                       )}
                       onDragOver={
                         isColumnHeader
@@ -658,7 +687,7 @@ export function TableDataGrid({
                         ref={rowVirtualizer.measureElement}
                         data-index={virtualRow.index}
                         aria-busy="true"
-                        className="h-11 hover:bg-transparent"
+                        className="h-9 hover:bg-transparent"
                       >
                         <TableCell className={rowNumberColumnClass}>
                           <span className="tabular-nums text-muted-foreground">
@@ -666,11 +695,11 @@ export function TableDataGrid({
                           </span>
                         </TableCell>
                         {displayColumns.map((column) => (
-                          <TableCell key={column.id}>
+                          <TableCell key={column.id} className="px-1.5 py-1">
                             <span className="block h-3.5 w-24 animate-pulse rounded bg-muted" />
                           </TableCell>
                         ))}
-                        <TableCell>
+                        <TableCell className="px-1 py-1">
                           <span className="sr-only">Loading row</span>
                         </TableCell>
                       </TableRow>
@@ -682,7 +711,7 @@ export function TableDataGrid({
                       key={virtualRow.key}
                       ref={rowVirtualizer.measureElement}
                       data-index={virtualRow.index}
-                      className="group h-11"
+                      className="group h-9"
                     >
                       {row.getAllCells().map((cell) => {
                         if (cell.column.id === "row-number") {
@@ -727,7 +756,7 @@ export function TableDataGrid({
                                   }
                                 }}
                               >
-                                <ContextMenuTrigger className="block select-none p-2">
+                                <ContextMenuTrigger className="block select-none px-1.5 py-1">
                                   <table.FlexRender cell={cell} />
                                 </ContextMenuTrigger>
                                 <ContextMenuContent>
@@ -748,7 +777,12 @@ export function TableDataGrid({
                         }
 
                         return (
-                          <TableCell key={cell.id}>
+                          <TableCell
+                            key={cell.id}
+                            className={
+                              cell.column.id === "row-actions" ? "px-1 py-1" : "px-1.5 py-1"
+                            }
+                          >
                             <table.FlexRender cell={cell} />
                           </TableCell>
                         );
@@ -780,7 +814,7 @@ export function TableDataGrid({
       </div>
 
       {moveColumns.error || hideColumn.error || runSheriff.error ? (
-        <p className="text-sm text-destructive">
+        <p className="shrink-0 text-sm text-destructive">
           {mutationErrorMessage(
             moveColumns.error,
             moveColumns.isError ? "Failed to reorder columns" : "",
@@ -789,19 +823,6 @@ export function TableDataGrid({
             mutationErrorMessage(runSheriff.error, runSheriff.isError ? "Failed to run research" : "")}
         </p>
       ) : null}
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          {total === 0
-            ? filterActive
-              ? "0 rows match filters"
-              : "0 rows"
-            : `${total} rows${filterActive ? " (filtered)" : ""}`}
-        </p>
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          {isFetchingRows ? "Loading rows…" : `${rows.length} rows cached near the viewport`}
-        </p>
-      </div>
 
       <RenameColumnDialog
         open={renameColumn !== null}
