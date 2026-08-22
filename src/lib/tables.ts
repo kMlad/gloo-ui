@@ -4,8 +4,12 @@ import { apiFetch } from "@/lib/api";
 export const primitiveColumnTypeSchema = z.enum(["text", "boolean"]);
 export type PrimitiveColumnType = z.infer<typeof primitiveColumnTypeSchema>;
 
-export const columnTypeSchema = z.enum(["text", "boolean", "sheriff"]);
+export const columnTypeSchema = z.enum(["text", "boolean", "sheriff", "email_enrichment"]);
 export type ColumnType = z.infer<typeof columnTypeSchema>;
+
+export function isComputedColumnType(type: string): type is "sheriff" | "email_enrichment" {
+  return type === "sheriff" || type === "email_enrichment";
+}
 
 const columnNameSchema = z.string().trim().min(1, "Column name is required").max(200);
 
@@ -48,9 +52,71 @@ export const sheriffColumnCreateSchema = z.object({
   sheriff: sheriffConfigSchema,
 });
 
+export const EMAIL_PROVIDERS = ["icypeas", "kitt", "leadmagic", "prospeo", "fullenrich"] as const;
+export const emailProviderSchema = z.enum(EMAIL_PROVIDERS);
+export type EmailProvider = z.infer<typeof emailProviderSchema>;
+export const EMAIL_PROVIDER_LABELS: Record<EmailProvider, string> = {
+  icypeas: "Icypeas",
+  kitt: "Kitt",
+  leadmagic: "LeadMagic",
+  prospeo: "Prospeo",
+  fullenrich: "FullEnrich",
+};
+
+export const emailValidatorSchema = z.literal("millionverifier");
+export type EmailValidator = z.infer<typeof emailValidatorSchema>;
+
+const emailInputColumnIdSchema = z.string().uuid("Select a text column");
+
+export const EMAIL_INPUT_FIELDS = [
+  { key: "first_name_column_id", label: "First name" },
+  { key: "last_name_column_id", label: "Last name" },
+  { key: "linkedin_column_id", label: "LinkedIn" },
+  { key: "company_name_column_id", label: "Company name" },
+  { key: "company_domain_column_id", label: "Company domain" },
+] as const;
+export type EmailInputFieldKey = (typeof EMAIL_INPUT_FIELDS)[number]["key"];
+
+export const emailEnrichmentConfigSchema = z
+  .object({
+    providers: z
+      .array(emailProviderSchema)
+      .min(1, "Turn on at least one provider")
+      .refine((providers) => new Set(providers).size === providers.length, {
+        message: "Providers must be unique",
+      }),
+    validator: emailValidatorSchema.default("millionverifier"),
+    first_name_column_id: emailInputColumnIdSchema,
+    last_name_column_id: emailInputColumnIdSchema,
+    linkedin_column_id: emailInputColumnIdSchema,
+    company_name_column_id: emailInputColumnIdSchema,
+    company_domain_column_id: emailInputColumnIdSchema,
+  })
+  .refine(
+    (config) => {
+      const ids = [
+        config.first_name_column_id,
+        config.last_name_column_id,
+        config.linkedin_column_id,
+        config.company_name_column_id,
+        config.company_domain_column_id,
+      ];
+      return new Set(ids).size === ids.length;
+    },
+    { message: "Each mapping must use a different column" },
+  );
+export type EmailEnrichmentConfig = z.infer<typeof emailEnrichmentConfigSchema>;
+
+export const emailEnrichmentColumnCreateSchema = z.object({
+  name: columnNameSchema,
+  type: z.literal("email_enrichment"),
+  email_enrichment: emailEnrichmentConfigSchema,
+});
+
 export const columnCreateSchema = z.discriminatedUnion("type", [
   primitiveColumnCreateSchema,
   sheriffColumnCreateSchema,
+  emailEnrichmentColumnCreateSchema,
 ]);
 export type ColumnCreate = z.infer<typeof columnCreateSchema>;
 
@@ -93,6 +159,41 @@ export const sheriffCellSchema = z.object({
   error: z.string().nullish(),
 });
 export type SheriffCell = z.infer<typeof sheriffCellSchema>;
+
+export const emailEnrichmentCellStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "skipped",
+  "not_found",
+]);
+export type EmailEnrichmentCellStatus = z.infer<typeof emailEnrichmentCellStatusSchema>;
+
+export const emailEnrichmentStepEmailSchema = z.object({
+  email: z.string(),
+  validation: z.string(),
+});
+export type EmailEnrichmentStepEmail = z.infer<typeof emailEnrichmentStepEmailSchema>;
+
+export const emailEnrichmentStepSchema = z.object({
+  provider: z.string(),
+  status: z.string(),
+  emails: z.array(emailEnrichmentStepEmailSchema).optional().default([]),
+});
+export type EmailEnrichmentStep = z.infer<typeof emailEnrichmentStepSchema>;
+
+export const emailEnrichmentCellSchema = z.object({
+  status: emailEnrichmentCellStatusSchema,
+  email: z.string().nullish(),
+  provider: z.string().nullish(),
+  validator: z.string().nullish(),
+  validation_result: z.string().nullish(),
+  rejected_emails: z.array(z.string()).optional().default([]),
+  steps: z.array(emailEnrichmentStepSchema).optional().default([]),
+  error: z.string().nullish(),
+});
+export type EmailEnrichmentCell = z.infer<typeof emailEnrichmentCellSchema>;
 
 export type SheriffRunCreate = {
   row_ids?: string[];
@@ -151,7 +252,7 @@ export const columnUpdateSchema = z
   });
 export type ColumnUpdate = z.infer<typeof columnUpdateSchema>;
 
-export const filterOperatorSchema = z.enum(["eq", "contains", "is_empty"]);
+export const filterOperatorSchema = z.enum(["eq", "contains", "is_empty", "is_not_empty"]);
 export type FilterOperator = z.infer<typeof filterOperatorSchema>;
 
 export type CellValue = string | boolean | null | Record<string, unknown>;
@@ -381,12 +482,16 @@ export function mutationErrorMessage(error: unknown, fallback: string) {
 
 export function operatorsForColumnType(type: string): FilterOperator[] {
   if (type === "boolean") {
-    return ["eq", "is_empty"];
+    return ["eq", "is_empty", "is_not_empty"];
   }
   if (type === "text") {
-    return ["eq", "contains", "is_empty"];
+    return ["eq", "contains", "is_empty", "is_not_empty"];
   }
-  return ["is_empty"];
+  return ["is_empty", "is_not_empty"];
+}
+
+export function filterOperatorNeedsValue(operator: FilterOperator): boolean {
+  return operator !== "is_empty" && operator !== "is_not_empty";
 }
 
 export function filterOperatorLabel(operator: FilterOperator): string {
@@ -396,11 +501,14 @@ export function filterOperatorLabel(operator: FilterOperator): string {
   if (operator === "contains") {
     return "contains";
   }
+  if (operator === "is_not_empty") {
+    return "is not empty";
+  }
   return "is empty";
 }
 
 export function formatFilterValue(filter: TableFilter): string | null {
-  if (filter.operator === "is_empty") {
+  if (!filterOperatorNeedsValue(filter.operator)) {
     return null;
   }
   if (typeof filter.value === "boolean") {
@@ -414,8 +522,8 @@ export function formatFilterValue(filter: TableFilter): string | null {
 
 export function serializeTableFilters(filters: TableFilter[]): TableFilter[] {
   return filters.map((filter) => {
-    if (filter.operator === "is_empty") {
-      return { column_id: filter.column_id, operator: "is_empty" };
+    if (!filterOperatorNeedsValue(filter.operator)) {
+      return { column_id: filter.column_id, operator: filter.operator };
     }
     return {
       column_id: filter.column_id,
@@ -434,10 +542,10 @@ export function buildTableFilter(input: {
   if (!allowed.includes(input.operator)) {
     return { ok: false, error: "That operator is not valid for this column" };
   }
-  if (input.operator === "is_empty") {
+  if (!filterOperatorNeedsValue(input.operator)) {
     return {
       ok: true,
-      filter: { column_id: input.column.id, operator: "is_empty" },
+      filter: { column_id: input.column.id, operator: input.operator },
     };
   }
   if (input.operator === "contains") {
@@ -483,31 +591,88 @@ export function parseSheriffCell(value: CellValue | undefined): SheriffCell | nu
   return parsed.success ? parsed.data : null;
 }
 
+export function parseEmailEnrichmentCell(value: CellValue | undefined): EmailEnrichmentCell | null {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const parsed = emailEnrichmentCellSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 export function sheriffCellIsActive(value: CellValue | undefined): boolean {
   const status = parseSheriffCell(value)?.status;
   return status === "queued" || status === "running";
 }
 
-export function sheriffInFlightStatus(
-  value: CellValue | undefined,
+export function sheriffCellIsFailed(value: CellValue | undefined): boolean {
+  return parseSheriffCell(value)?.status === "failed";
+}
+
+export function emailEnrichmentCellIsActive(value: CellValue | undefined): boolean {
+  const status = parseEmailEnrichmentCell(value)?.status;
+  return status === "queued" || status === "running";
+}
+
+function inFlightStatusFrom(
+  status: string | undefined,
   pending = false,
 ): "queued" | "running" | null {
   if (pending) {
     return "queued";
   }
-  const status = parseSheriffCell(value)?.status;
   if (status === "queued" || status === "running") {
     return status;
   }
   return null;
 }
 
-export function rowsHaveActiveSheriff(rows: RowResponse[], columns: ColumnResponse[]): boolean {
-  const sheriffIds = columns.filter((column) => column.type === "sheriff").map((column) => column.id);
-  if (sheriffIds.length === 0) {
+export function sheriffInFlightStatus(
+  value: CellValue | undefined,
+  pending = false,
+): "queued" | "running" | null {
+  return inFlightStatusFrom(parseSheriffCell(value)?.status, pending);
+}
+
+export function emailEnrichmentInFlightStatus(
+  value: CellValue | undefined,
+  pending = false,
+): "queued" | "running" | null {
+  return inFlightStatusFrom(parseEmailEnrichmentCell(value)?.status, pending);
+}
+
+export function computedInFlightStatus(
+  type: string,
+  value: CellValue | undefined,
+  pending = false,
+): "queued" | "running" | null {
+  if (type === "email_enrichment") {
+    return emailEnrichmentInFlightStatus(value, pending);
+  }
+  return sheriffInFlightStatus(value, pending);
+}
+
+function computedCellIsActive(type: string, value: CellValue | undefined): boolean {
+  if (type === "email_enrichment") {
+    return emailEnrichmentCellIsActive(value);
+  }
+  if (type === "sheriff") {
+    return sheriffCellIsActive(value);
+  }
+  return false;
+}
+
+export function rowsHaveActiveComputedRuns(rows: RowResponse[], columns: ColumnResponse[]): boolean {
+  const computed = columns.filter((column) => isComputedColumnType(column.type));
+  if (computed.length === 0) {
     return false;
   }
-  return rows.some((row) => sheriffIds.some((columnId) => sheriffCellIsActive(row.values[columnId])));
+  return rows.some((row) =>
+    computed.some((column) => computedCellIsActive(column.type, row.values[column.id])),
+  );
+}
+
+export function rowsHaveActiveSheriff(rows: RowResponse[], columns: ColumnResponse[]): boolean {
+  return rowsHaveActiveComputedRuns(rows, columns);
 }
 
 export function orderedColumns(columns: ColumnResponse[]): ColumnResponse[] {

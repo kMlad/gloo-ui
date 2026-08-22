@@ -3,12 +3,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
-  sheriffInFlightStatus,
+  computedInFlightStatus,
   deleteColumn,
   deleteRow,
+  isComputedColumnType,
   mutationErrorMessage,
   reorderColumns,
   reorderVisibleColumns,
+  sheriffCellIsFailed,
   startSheriffRun,
   tableKeys,
   updateColumn,
@@ -21,6 +23,8 @@ import {
 } from "@/lib/tables";
 import { tableGridFeatures, type TableGridFeatures } from "@/ui/components/tables/data-table-features";
 import { BooleanCell, EditableTextCell } from "@/ui/components/tables/editable-cell";
+import { EmailEnrichmentCell } from "@/ui/components/tables/email-enrichment-cell";
+import { EmailEnrichmentRunDrawer } from "@/ui/components/tables/email-enrichment-run-drawer";
 import { SheriffCell } from "@/ui/components/tables/sheriff-cell";
 import { SheriffRunDrawer } from "@/ui/components/tables/sheriff-run-drawer";
 import { ConfirmDeleteDialog } from "@/ui/components/tables/confirm-delete-dialog";
@@ -55,6 +59,7 @@ import {
   BanIcon,
   MoreVerticalIcon,
   PlayIcon,
+  Refresh01Icon,
 } from "@hugeicons/core-free-icons";
 
 function sheriffRunKey(rowId: string, columnId: string) {
@@ -70,6 +75,20 @@ type SheriffAnchor = {
   columnId: string;
   rowId: string;
 };
+
+function failedSheriffRowIds(
+  rowsById: Map<string, RowResponse>,
+  rowIds: string[],
+  columnId: string,
+  pendingRuns: Set<string>,
+) {
+  return rowIds.filter((rowId) => {
+    if (pendingRuns.has(sheriffRunKey(rowId, columnId))) {
+      return false;
+    }
+    return sheriffCellIsFailed(rowsById.get(rowId)?.values[columnId]);
+  });
+}
 
 function rowIdsBetween(orderedRowIds: string[], fromId: string, toId: string) {
   const fromIndex = orderedRowIds.indexOf(fromId);
@@ -94,7 +113,7 @@ function dataColumnWidth(column: ColumnResponse) {
   if (column.type === "boolean") {
     return 88;
   }
-  if (column.type === "sheriff") {
+  if (column.type === "sheriff" || column.type === "email_enrichment") {
     return 144;
   }
   return 160;
@@ -151,19 +170,23 @@ export function TableDataGrid({
   const [sheriffSelection, setSheriffSelection] = useState<SheriffSelection | null>(null);
   const draggingIdRef = useRef<string | null>(null);
   const sheriffAnchorRef = useRef<SheriffAnchor | null>(null);
+  const sheriffSelectionRef = useRef<SheriffSelection | null>(null);
+  const sheriffContextSelectionRef = useRef<SheriffSelection | null>(null);
   const orderedRowIdsRef = useRef<string[]>([]);
   const columnsRef = useRef(schemaColumns);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   columnsRef.current = schemaColumns;
 
-  const { rows, rowByVirtualIndex, virtualIndexByRowId } = useMemo(() => {
+  const { rows, rowById, rowByVirtualIndex, virtualIndexByRowId } = useMemo(() => {
     const indexedRows = new Map<number, RowResponse>();
     for (const page of rowPages) {
       page.items.forEach((row, index) => indexedRows.set(page.offset + index, row));
     }
     const orderedEntries = [...indexedRows.entries()].sort(([left], [right]) => left - right);
+    const orderedRows = orderedEntries.map(([, row]) => row);
     return {
-      rows: orderedEntries.map(([, row]) => row),
+      rows: orderedRows,
+      rowById: new Map(orderedRows.map((row) => [row.id, row])),
       rowByVirtualIndex: indexedRows,
       virtualIndexByRowId: new Map(orderedEntries.map(([index, row]) => [row.id, index])),
     };
@@ -282,48 +305,99 @@ export function TableDataGrid({
   );
   const canHideColumn = displayColumns.length > 1;
   const canReorder = displayColumns.length > 1;
+  const sheriffFailedColumns = useMemo(
+    () =>
+      displayColumns.flatMap((column) => {
+        if (column.type !== "sheriff") {
+          return [];
+        }
+        const rowIds = failedSheriffRowIds(
+          rowById,
+          rows.map((row) => row.id),
+          column.id,
+          pendingRuns,
+        );
+        return rowIds.length > 0 ? [{ column, rowIds }] : [];
+      }),
+    [displayColumns, pendingRuns, rowById, rows],
+  );
+
+  function updateSheriffSelection(selection: SheriffSelection | null) {
+    sheriffSelectionRef.current = selection;
+    setSheriffSelection(selection);
+  }
 
   function clearSheriffSelection() {
     sheriffAnchorRef.current = null;
-    setSheriffSelection(null);
+    sheriffContextSelectionRef.current = null;
+    updateSheriffSelection(null);
   }
 
-  function selectSheriffCell(rowId: string, columnId: string) {
+  function startSheriffSelection(rowId: string, columnId: string) {
     sheriffAnchorRef.current = { columnId, rowId };
-    setSheriffSelection({ columnId, rowIds: [rowId] });
+    updateSheriffSelection({ columnId, rowIds: [rowId] });
   }
 
   function handleSheriffPointer(event: React.MouseEvent, rowId: string, columnId: string) {
     if (event.shiftKey) {
       const anchor = sheriffAnchorRef.current;
       if (anchor && anchor.columnId === columnId) {
-        setSheriffSelection({
+        updateSheriffSelection({
           columnId,
           rowIds: rowIdsBetween(orderedRowIdsRef.current, anchor.rowId, rowId),
         });
       } else {
-        selectSheriffCell(rowId, columnId);
+        startSheriffSelection(rowId, columnId);
       }
       return;
     }
-    sheriffAnchorRef.current = { columnId, rowId };
-    setSheriffSelection(null);
+    clearSheriffSelection();
   }
 
-  function handleSheriffContextOpen(rowId: string, columnId: string) {
+  function prepareSheriffContextMenu(rowId: string, columnId: string) {
+    const selection = sheriffSelectionRef.current;
     const selected =
-      sheriffSelection?.columnId === columnId && sheriffSelection.rowIds.includes(rowId);
+      selection?.columnId === columnId && selection.rowIds.includes(rowId);
+    const contextSelection = selected
+      ? selection
+      : { columnId, rowIds: [rowId] };
+
+    sheriffContextSelectionRef.current = contextSelection;
     if (!selected) {
-      selectSheriffCell(rowId, columnId);
+      sheriffAnchorRef.current = null;
+      updateSheriffSelection(contextSelection);
     }
   }
 
+  function contextSheriffRowIds(rowId: string, columnId: string) {
+    const selection =
+      sheriffContextSelectionRef.current ?? sheriffSelectionRef.current;
+    if (selection?.columnId === columnId && selection.rowIds.includes(rowId)) {
+      return [...selection.rowIds];
+    }
+    return [rowId];
+  }
+
   function runSelectedSheriffCells(rowId: string, columnId: string) {
-    const rowIds =
-      sheriffSelection?.columnId === columnId && sheriffSelection.rowIds.includes(rowId)
-        ? sheriffSelection.rowIds
-        : [rowId];
-    runSheriff.mutate({ rowIds, columnId, overwrite: false });
+    runSheriff.mutate({
+      rowIds: contextSheriffRowIds(rowId, columnId),
+      columnId,
+      overwrite: false,
+    });
+    clearSheriffSelection();
+  }
+
+  function rerunFailedSheriffCells(rowId: string, columnId: string) {
+    const rowIds = failedSheriffRowIds(
+      rowById,
+      contextSheriffRowIds(rowId, columnId),
+      columnId,
+      pendingRuns,
+    );
+    if (rowIds.length === 0) {
+      return;
+    }
+    runSheriff.mutate({ rowIds, columnId, overwrite: true });
     clearSheriffSelection();
   }
 
@@ -449,6 +523,19 @@ export function TableDataGrid({
                   }
                   onOpen={() => setInspected({ rowId: row.original.id, columnId: column.id })}
                 />
+              ) : column.type === "email_enrichment" ? (
+                <EmailEnrichmentCell
+                  value={getValue()}
+                  pending={pendingRuns.has(sheriffRunKey(row.original.id, column.id))}
+                  onRun={() =>
+                    runSheriff.mutate({
+                      rowIds: [row.original.id],
+                      columnId: column.id,
+                      overwrite: false,
+                    })
+                  }
+                  onOpen={() => setInspected({ rowId: row.original.id, columnId: column.id })}
+                />
               ) : column.type === "boolean" ? (
                 <BooleanCell
                   value={getValue()}
@@ -546,7 +633,7 @@ export function TableDataGrid({
       if (!(target instanceof Element)) {
         return;
       }
-      if (target.closest("[data-sheriff-cell]")) {
+      if (target.closest("[data-computed-cell]")) {
         return;
       }
       if (target.closest("[data-slot='context-menu-content']")) {
@@ -568,11 +655,30 @@ export function TableDataGrid({
     : undefined;
   const inspectedRow = inspected ? rows.find((row) => row.id === inspected.rowId) : undefined;
   const inspectedInFlight = inspected
-    ? sheriffInFlightStatus(
+    ? computedInFlightStatus(
+        inspectedColumn?.type ?? "sheriff",
         inspectedRow?.values[inspected.columnId],
         pendingRuns.has(sheriffRunKey(inspected.rowId, inspected.columnId)),
       )
     : null;
+  const inspectedRunError =
+    inspected &&
+    runSheriff.variables?.rowIds.includes(inspected.rowId) &&
+    runSheriff.variables?.columnId === inspected.columnId
+      ? mutationErrorMessage(
+          runSheriff.error,
+          runSheriff.isError
+            ? inspectedColumn?.type === "email_enrichment"
+              ? "Failed to find work email"
+              : "Failed to run research"
+            : "",
+        )
+      : null;
+  const inspectedRerunPending = inspected
+    ? runSheriff.isPending &&
+      Boolean(runSheriff.variables?.rowIds.includes(inspected.rowId)) &&
+      runSheriff.variables?.columnId === inspected.columnId
+    : false;
 
   if (displayColumns.length === 0) {
     return (
@@ -585,6 +691,31 @@ export function TableDataGrid({
 
   return (
     <>
+      {sheriffFailedColumns.length > 0 ? (
+        <div className="mb-2 flex shrink-0 flex-wrap items-center gap-1.5">
+          {sheriffFailedColumns.map(({ column, rowIds }) => (
+            <Button
+              key={column.id}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={runSheriff.isPending}
+              onClick={() =>
+                runSheriff.mutate({
+                  rowIds,
+                  columnId: column.id,
+                  overwrite: true,
+                })
+              }
+            >
+              <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
+              <span className="truncate">
+                Rerun {rowIds.length} failed in {column.name}
+              </span>
+            </Button>
+          ))}
+        </div>
+      ) : null}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card">
         <Table
           containerRef={scrollContainerRef}
@@ -725,21 +856,33 @@ export function TableDataGrid({
                         const schemaColumn = schemaColumns.find(
                           (column) => column.id === cell.column.id,
                         );
-                        if (schemaColumn?.type === "sheriff") {
+                        if (schemaColumn && isComputedColumnType(schemaColumn.type)) {
                           const selected =
                             sheriffSelection?.columnId === schemaColumn.id &&
                             sheriffSelection.rowIds.includes(row.original.id);
                           const selectedCount = selected ? sheriffSelection.rowIds.length : 1;
+                          const failedCount =
+                            schemaColumn.type === "sheriff"
+                              ? failedSheriffRowIds(
+                                  rowById,
+                                  selected ? sheriffSelection.rowIds : [row.original.id],
+                                  schemaColumn.id,
+                                  pendingRuns,
+                                ).length
+                              : 0;
                           return (
                             <TableCell
                               key={cell.id}
-                              data-sheriff-cell=""
+                              data-computed-cell=""
                               aria-selected={selected || undefined}
                               className={cn(
                                 "p-0",
                                 selected && "bg-primary/10 ring-1 ring-inset ring-primary/25",
                               )}
                               onMouseDown={(event) => {
+                                if (!event.currentTarget.contains(event.target as Node)) {
+                                  return;
+                                }
                                 if (event.button !== 0) {
                                   return;
                                 }
@@ -748,11 +891,14 @@ export function TableDataGrid({
                                 }
                                 handleSheriffPointer(event, row.original.id, schemaColumn.id);
                               }}
+                              onContextMenuCapture={() => {
+                                prepareSheriffContextMenu(row.original.id, schemaColumn.id);
+                              }}
                             >
                               <ContextMenu
                                 onOpenChange={(open) => {
                                   if (open) {
-                                    handleSheriffContextOpen(row.original.id, schemaColumn.id);
+                                    prepareSheriffContextMenu(row.original.id, schemaColumn.id);
                                   }
                                 }}
                               >
@@ -770,6 +916,19 @@ export function TableDataGrid({
                                     Run {selectedCount} selected{" "}
                                     {selectedCount === 1 ? "cell" : "cells"}
                                   </ContextMenuItem>
+                                  {failedCount > 0 ? (
+                                    <ContextMenuItem
+                                      disabled={runSheriff.isPending}
+                                      onClick={() =>
+                                        rerunFailedSheriffCells(row.original.id, schemaColumn.id)
+                                      }
+                                    >
+                                      <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
+                                      {failedCount === 1
+                                        ? "Rerun"
+                                        : `Rerun ${failedCount} failed cells`}
+                                    </ContextMenuItem>
+                                  ) : null}
                                 </ContextMenuContent>
                               </ContextMenu>
                             </TableCell>
@@ -820,7 +979,10 @@ export function TableDataGrid({
             moveColumns.isError ? "Failed to reorder columns" : "",
           ) ||
             mutationErrorMessage(hideColumn.error, hideColumn.isError ? "Failed to hide column" : "") ||
-            mutationErrorMessage(runSheriff.error, runSheriff.isError ? "Failed to run research" : "")}
+            mutationErrorMessage(
+              runSheriff.error,
+              runSheriff.isError ? "Failed to run selected cells" : "",
+            )}
         </p>
       ) : null}
 
@@ -836,7 +998,7 @@ export function TableDataGrid({
       />
 
       <SheriffRunDrawer
-        open={inspected !== null}
+        open={inspectedColumn?.type === "sheriff"}
         onOpenChange={(open) => {
           if (!open) {
             setInspected(null);
@@ -850,23 +1012,35 @@ export function TableDataGrid({
         value={inspectedRow?.values[inspected?.columnId ?? ""]}
         columns={schemaColumns}
         inFlight={inspectedInFlight}
-        rerunPending={
-          inspected
-            ? runSheriff.isPending &&
-              Boolean(runSheriff.variables?.rowIds.includes(inspected.rowId)) &&
-              runSheriff.variables?.columnId === inspected.columnId
-            : false
-        }
-        error={
-          inspected &&
-          runSheriff.variables?.rowIds.includes(inspected.rowId) &&
-          runSheriff.variables?.columnId === inspected.columnId
-            ? mutationErrorMessage(
-                runSheriff.error,
-                runSheriff.isError ? "Failed to run research" : "",
-              )
-            : null
-        }
+        rerunPending={inspectedRerunPending}
+        error={inspectedRunError}
+        onRerun={() => {
+          if (!inspected) {
+            return;
+          }
+          runSheriff.mutate({
+            rowIds: [inspected.rowId],
+            columnId: inspected.columnId,
+            overwrite: true,
+          });
+        }}
+      />
+
+      <EmailEnrichmentRunDrawer
+        open={inspectedColumn?.type === "email_enrichment"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInspected(null);
+            if (!runSheriff.isPending) {
+              runSheriff.reset();
+            }
+          }
+        }}
+        columnName={inspectedColumn?.name ?? "Work email"}
+        value={inspectedRow?.values[inspected?.columnId ?? ""]}
+        inFlight={inspectedInFlight}
+        rerunPending={inspectedRerunPending}
+        error={inspectedRunError}
         onRerun={() => {
           if (!inspected) {
             return;

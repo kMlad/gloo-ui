@@ -6,7 +6,7 @@ import {
   listRows,
   mutationErrorMessage,
   ROW_PAGE_SIZE,
-  rowsHaveActiveSheriff,
+  rowsHaveActiveComputedRuns,
   tableKeys,
   tableUpdateSchema,
   updateTable,
@@ -55,7 +55,7 @@ export function TableDetailPage() {
         refetchInterval: (query: { state: { data?: Awaited<ReturnType<typeof listRows>> } }) => {
           const items = query.state.data?.items;
           const columns = tableQuery.data?.columns;
-          if (!items || !columns || !rowsHaveActiveSheriff(items, columns)) {
+          if (!items || !columns || !rowsHaveActiveComputedRuns(items, columns)) {
             return false;
           }
           return 2000;

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   buildTableFilter,
   filterOperatorLabel,
+  filterOperatorNeedsValue,
   formatFilterValue,
   mutationErrorMessage,
   operatorsForColumnType,
@@ -196,7 +197,11 @@ function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: 
     const result = buildTableFilter({
       column,
       operator,
-      value: operator === "is_empty" ? null : column.type === "boolean" ? booleanValue : textValue,
+      value: filterOperatorNeedsValue(operator)
+        ? column.type === "boolean"
+          ? booleanValue
+          : textValue
+        : null,
     });
     if (!result.ok) {
       setError(result.error);
@@ -253,7 +258,7 @@ function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: 
         ))}
       </select>
 
-      {operator !== "is_empty" && column.type === "boolean" ? (
+      {filterOperatorNeedsValue(operator) && column.type === "boolean" ? (
         <select
           aria-label="Value"
           value={booleanValue ? "true" : "false"}
@@ -266,7 +271,7 @@ function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: 
         </select>
       ) : null}
 
-      {operator !== "is_empty" && column.type === "text" ? (
+      {filterOperatorNeedsValue(operator) && column.type === "text" ? (
         <Input
           value={textValue}
           disabled={disabled}

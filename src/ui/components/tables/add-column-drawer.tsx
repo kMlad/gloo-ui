@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   addColumn,
+  EMAIL_INPUT_FIELDS,
+  EMAIL_PROVIDER_LABELS,
+  EMAIL_PROVIDERS,
+  emailEnrichmentColumnCreateSchema,
+  isComputedColumnType,
   sheriffColumnCreateSchema,
   sheriffExpandRequestSchema,
   expandSheriffPrompt,
@@ -11,9 +16,12 @@ import {
   primitiveColumnTypeSchema,
   tableKeys,
   type ColumnResponse,
+  type EmailInputFieldKey,
+  type EmailProvider,
   type PrimitiveColumnType,
 } from "@/lib/tables";
 import { Button } from "@/ui/components/ui/button";
+import { Checkbox } from "@/ui/components/ui/checkbox";
 import {
   Drawer,
   DrawerClose,
@@ -28,9 +36,13 @@ import { Input } from "@/ui/components/ui/input";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Add01Icon,
+  ArrowDown01Icon,
   ArrowLeft01Icon,
+  ArrowUp01Icon,
   Cancel01Icon,
+  MailSearch01Icon,
   Sheriff01Icon,
+  SquareLock01Icon,
   TextFontIcon,
   UnfoldMoreIcon,
 } from "@hugeicons/core-free-icons";
@@ -62,7 +74,28 @@ function slashMentionAt(text: string, cursor: number): SlashMention | null {
   return { start: cursor - match[1].length, query: match[2] };
 }
 
-type DrawerView = "picker" | "regular" | "sheriff";
+type DrawerView = "picker" | "regular" | "sheriff" | "email_enrichment";
+
+type ProviderDraft = {
+  id: EmailProvider;
+  enabled: boolean;
+};
+
+type EmailMappings = Record<EmailInputFieldKey, string>;
+
+function defaultProviders(): ProviderDraft[] {
+  return EMAIL_PROVIDERS.map((id) => ({ id, enabled: true }));
+}
+
+function emptyMappings(): EmailMappings {
+  return {
+    first_name_column_id: "",
+    last_name_column_id: "",
+    linkedin_column_id: "",
+    company_name_column_id: "",
+    company_domain_column_id: "",
+  };
+}
 
 type DraftOutput = {
   id: string;
@@ -89,6 +122,9 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
   const [prompt, setPrompt] = useState("");
   const [sourcePrompt, setSourcePrompt] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<DraftOutput[]>([emptyOutput()]);
+  const [emailName, setEmailName] = useState("Work email");
+  const [providers, setProviders] = useState<ProviderDraft[]>(defaultProviders);
+  const [emailMappings, setEmailMappings] = useState<EmailMappings>(emptyMappings);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [mention, setMention] = useState<SlashMention | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -107,9 +143,15 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
   });
 
   const mentionableColumns = useMemo(
-    () => columns.filter((column) => column.type !== "sheriff"),
+    () => columns.filter((column) => !isComputedColumnType(column.type)),
     [columns],
   );
+  const textColumns = useMemo(
+    () => columns.filter((column) => column.type === "text"),
+    [columns],
+  );
+  const enabledProviderCount = providers.filter((provider) => provider.enabled).length;
+  const hasEnoughTextColumns = textColumns.length >= EMAIL_INPUT_FIELDS.length;
   const mentionMatches = useMemo(() => {
     if (!mention) {
       return [];
@@ -159,6 +201,9 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
     setSourcePrompt(null);
     setMention(null);
     setOutputs([emptyOutput()]);
+    setEmailName("Work email");
+    setProviders(defaultProviders());
+    setEmailMappings(emptyMappings());
     setValidationError(null);
     create.reset();
     expand.reset();
@@ -209,6 +254,54 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
     }
 
     create.mutate(parsed.data);
+  }
+
+  function handleEmailEnrichmentSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setValidationError(null);
+    create.reset();
+
+    const parsed = emailEnrichmentColumnCreateSchema.safeParse({
+      name: emailName,
+      type: "email_enrichment",
+      email_enrichment: {
+        providers: providers.filter((provider) => provider.enabled).map((provider) => provider.id),
+        validator: "millionverifier",
+        ...emailMappings,
+      },
+    });
+    if (!parsed.success) {
+      setValidationError(parsed.error.issues[0]?.message ?? "Invalid email enrichment column");
+      return;
+    }
+
+    create.mutate(parsed.data);
+  }
+
+  function toggleProvider(id: EmailProvider, enabled: boolean) {
+    setProviders((current) => {
+      const next = current.map((provider) => (provider.id === id ? { ...provider, enabled } : provider));
+      if (!next.some((provider) => provider.enabled)) {
+        return current;
+      }
+      return next;
+    });
+  }
+
+  function moveProvider(index: number, direction: -1 | 1) {
+    setProviders((current) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      const [moved] = next.splice(index, 1);
+      if (!moved) {
+        return current;
+      }
+      next.splice(nextIndex, 0, moved);
+      return next;
+    });
   }
 
   function handleExpand() {
@@ -276,13 +369,21 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
       mutationErrorMessage(expand.error, expand.isError ? "Failed to expand prompt" : ""));
 
   const title =
-    view === "regular" ? "Text or boolean" : view === "sheriff" ? "Sheriff" : "Add column";
+    view === "regular"
+      ? "Text or boolean"
+      : view === "sheriff"
+        ? "Sheriff"
+        : view === "email_enrichment"
+          ? "Find work email"
+          : "Add column";
   const description =
     view === "regular"
       ? "Text or boolean. Column type cannot be changed later."
       : view === "sheriff"
         ? "Research the web and write results into output columns."
-        : "Choose the kind of column to add.";
+        : view === "email_enrichment"
+          ? "Look up a work email from name, company, and LinkedIn."
+          : "Choose the kind of column to add.";
 
   return (
     <Drawer open={open} onOpenChange={handleOpenChange} swipeDirection="right">
@@ -328,6 +429,12 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
                 title="Sheriff"
                 description="A research prompt that writes into child columns."
                 onClick={() => setView("sheriff")}
+              />
+              <ColumnTypeOption
+                icon={MailSearch01Icon}
+                title="Find work email"
+                description="Look up a work email from name, company, and LinkedIn."
+                onClick={() => setView("email_enrichment")}
               />
             </div>
             <DrawerFooter className="flex-row justify-end">
@@ -559,6 +666,158 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
                 Cancel
               </Button>
               <Button type="submit" disabled={create.isPending || expand.isPending}>
+                {create.isPending ? "Adding…" : "Add column"}
+              </Button>
+            </DrawerFooter>
+          </form>
+        ) : null}
+
+        {view === "email_enrichment" ? (
+          <form onSubmit={handleEmailEnrichmentSubmit} className="flex min-h-0 flex-1 flex-col">
+            <FieldGroup className="flex-1 gap-4 overflow-y-auto p-4">
+              <Field>
+                <FieldLabel htmlFor="email-enrichment-name" className="text-xs text-muted-foreground">
+                  Name
+                </FieldLabel>
+                <Input
+                  id="email-enrichment-name"
+                  value={emailName}
+                  onChange={(event) => setEmailName(event.target.value)}
+                  placeholder="Work email"
+                  required
+                  autoFocus
+                  className="h-9 rounded-lg px-3 text-sm"
+                />
+              </Field>
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-muted-foreground">Providers</p>
+                {providers.map((provider, index) => (
+                  <div
+                    key={provider.id}
+                    className="flex items-center gap-2 rounded-xl border border-border/70 bg-background px-3 py-2"
+                  >
+                    <Checkbox
+                      checked={provider.enabled}
+                      disabled={provider.enabled && enabledProviderCount === 1}
+                      aria-label={`Use ${EMAIL_PROVIDER_LABELS[provider.id]}`}
+                      onCheckedChange={(next) => {
+                        if (typeof next === "boolean") {
+                          toggleProvider(provider.id, next);
+                        }
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                      {EMAIL_PROVIDER_LABELS[provider.id]}
+                    </span>
+                    <div className="flex shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Move ${EMAIL_PROVIDER_LABELS[provider.id]} up`}
+                        disabled={index === 0 || create.isPending}
+                        onClick={() => moveProvider(index, -1)}
+                      >
+                        <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Move ${EMAIL_PROVIDER_LABELS[provider.id]} down`}
+                        disabled={index === providers.length - 1 || create.isPending}
+                        onClick={() => moveProvider(index, 1)}
+                      >
+                        <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <FieldDescription>
+                  Order is the waterfall sequence. At least one provider must stay on.
+                </FieldDescription>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-muted-foreground">Verification</p>
+                <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-muted/30 px-3 py-2">
+                  <Checkbox checked disabled aria-label="MillionVerifier is required" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">MillionVerifier</span>
+                  <HugeiconsIcon
+                    icon={SquareLock01Icon}
+                    strokeWidth={2}
+                    className="size-4 shrink-0 text-muted-foreground"
+                  />
+                </div>
+                <FieldDescription>Email verification is locked to MillionVerifier.</FieldDescription>
+              </div>
+              <div className="flex flex-col gap-3">
+                <p className="text-xs text-muted-foreground">Input columns</p>
+                {EMAIL_INPUT_FIELDS.map((field) => (
+                  <Field key={field.key}>
+                    <FieldLabel htmlFor={field.key} className="text-xs text-muted-foreground">
+                      {field.label}
+                    </FieldLabel>
+                    <div className="relative">
+                      <select
+                        id={field.key}
+                        value={emailMappings[field.key]}
+                        disabled={create.isPending || !hasEnoughTextColumns}
+                        onChange={(event) =>
+                          setEmailMappings((current) => ({
+                            ...current,
+                            [field.key]: event.target.value,
+                          }))
+                        }
+                        className={`${nativeSelectClass} w-full`}
+                      >
+                        <option value="">Select a text column</option>
+                        {textColumns.map((column) => (
+                          <option
+                            key={column.id}
+                            value={column.id}
+                            disabled={
+                              column.id !== emailMappings[field.key] &&
+                              Object.values(emailMappings).includes(column.id)
+                            }
+                          >
+                            {column.name}
+                          </option>
+                        ))}
+                      </select>
+                      <HugeiconsIcon
+                        icon={UnfoldMoreIcon}
+                        strokeWidth={2}
+                        className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
+                      />
+                    </div>
+                  </Field>
+                ))}
+                {hasEnoughTextColumns ? (
+                  <FieldDescription>
+                    Each field must map to a different text column.
+                  </FieldDescription>
+                ) : (
+                  <FieldDescription>
+                    Add at least {EMAIL_INPUT_FIELDS.length} text columns before creating this
+                    enrichment.
+                  </FieldDescription>
+                )}
+              </div>
+              {error ? <p className="text-xs text-destructive">{error}</p> : null}
+            </FieldGroup>
+            <DrawerFooter className="flex-row justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={create.isPending}
+                onClick={() => handleOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={create.isPending || !hasEnoughTextColumns || enabledProviderCount === 0}
+              >
                 {create.isPending ? "Adding…" : "Add column"}
               </Button>
             </DrawerFooter>
