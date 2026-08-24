@@ -86,6 +86,7 @@ export const emailEnrichmentConfigSchema = z
         message: "Providers must be unique",
       }),
     validator: emailValidatorSchema.default("millionverifier"),
+    accept_catchall: z.boolean().default(false),
     first_name_column_id: emailInputColumnIdSchema,
     last_name_column_id: emailInputColumnIdSchema,
     linkedin_column_id: emailInputColumnIdSchema,
@@ -246,10 +247,15 @@ export const columnUpdateSchema = z
   .object({
     name: z.string().trim().min(1, "Column name is required").max(200).optional(),
     hidden: z.boolean().optional(),
+    email_enrichment: emailEnrichmentConfigSchema.optional(),
   })
-  .refine((value) => value.name !== undefined || value.hidden !== undefined, {
-    message: "At least one field is required",
-  });
+  .refine(
+    (value) =>
+      value.name !== undefined || value.hidden !== undefined || value.email_enrichment !== undefined,
+    {
+      message: "At least one field is required",
+    },
+  );
 export type ColumnUpdate = z.infer<typeof columnUpdateSchema>;
 
 export const filterOperatorSchema = z.enum(["eq", "contains", "is_empty", "is_not_empty"]);
@@ -596,6 +602,16 @@ export function parseEmailEnrichmentCell(value: CellValue | undefined): EmailEnr
     return null;
   }
   const parsed = emailEnrichmentCellSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseEmailEnrichmentConfig(
+  config: Record<string, unknown> | null | undefined,
+): EmailEnrichmentConfig | null {
+  if (config == null) {
+    return null;
+  }
+  const parsed = emailEnrichmentConfigSchema.safeParse(config);
   return parsed.success ? parsed.data : null;
 }
 

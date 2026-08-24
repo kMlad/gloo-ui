@@ -120,7 +120,7 @@ export function EmailEnrichmentRunDrawer({
                 <Section label="Verification">
                   <p className="text-sm text-foreground">
                     {cell.validator === "millionverifier" ? "MillionVerifier" : cell.validator}
-                    {cell.validation_result ? ` · ${cell.validation_result}` : ""}
+                    {cell.validation_result ? ` · ${verificationResultLabel(cell.validation_result)}` : ""}
                   </p>
                 </Section>
               ) : null}
@@ -316,9 +316,22 @@ function stepStatusClass(status: string) {
   return "text-muted-foreground";
 }
 
+function verificationResultLabel(result: string) {
+  if (result === "ok") {
+    return "Valid";
+  }
+  if (result === "catch_all") {
+    return "Catch-all";
+  }
+  return result;
+}
+
 function validationLabel(validation: string) {
   if (validation === "valid") {
     return "Valid";
+  }
+  if (validation === "catch_all") {
+    return "Catch-all";
   }
   if (validation === "invalid") {
     return "Invalid";
@@ -339,7 +352,7 @@ function validationLabel(validation: string) {
 }
 
 function validationClass(validation: string) {
-  if (validation === "valid") {
+  if (validation === "valid" || validation === "catch_all") {
     return "text-foreground";
   }
   if (validation === "invalid" || validation === "failed" || validation === "rate_limited" || validation === "timed_out") {
@@ -349,7 +362,7 @@ function validationClass(validation: string) {
 }
 
 function validationIcon(validation: string) {
-  if (validation === "valid") {
+  if (validation === "valid" || validation === "catch_all") {
     return Tick02Icon;
   }
   if (validation === "skipped") {

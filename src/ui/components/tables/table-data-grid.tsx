@@ -28,6 +28,7 @@ import { EmailEnrichmentRunDrawer } from "@/ui/components/tables/email-enrichmen
 import { SheriffCell } from "@/ui/components/tables/sheriff-cell";
 import { SheriffRunDrawer } from "@/ui/components/tables/sheriff-run-drawer";
 import { ConfirmDeleteDialog } from "@/ui/components/tables/confirm-delete-dialog";
+import { EditColumnDrawer } from "@/ui/components/tables/edit-column-drawer";
 import { RenameColumnDialog } from "@/ui/components/tables/rename-column-dialog";
 import { Button } from "@/ui/components/ui/button";
 import {
@@ -163,6 +164,7 @@ export function TableDataGrid({
 }: TableDataGridProps) {
   const queryClient = useQueryClient();
   const [renameColumn, setRenameColumn] = useState<ColumnResponse | null>(null);
+  const [editColumn, setEditColumn] = useState<ColumnResponse | null>(null);
   const [deleteColumnTarget, setDeleteColumnTarget] = useState<ColumnResponse | null>(null);
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
   const [pendingRuns, setPendingRuns] = useState<Set<string>>(() => new Set());
@@ -492,6 +494,9 @@ export function TableDataGrid({
                           )}
                           <DropdownMenuSeparator />
                         </>
+                      ) : null}
+                      {column.type === "email_enrichment" ? (
+                        <DropdownMenuItem onClick={() => setEditColumn(column)}>Edit</DropdownMenuItem>
                       ) : null}
                       <DropdownMenuItem onClick={() => setRenameColumn(column)}>Rename</DropdownMenuItem>
                       <DropdownMenuItem
@@ -985,6 +990,18 @@ export function TableDataGrid({
             )}
         </p>
       ) : null}
+
+      <EditColumnDrawer
+        open={editColumn !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditColumn(null);
+          }
+        }}
+        tableId={tableId}
+        column={editColumn}
+        columns={schemaColumns}
+      />
 
       <RenameColumnDialog
         open={renameColumn !== null}
