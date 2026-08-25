@@ -73,7 +73,7 @@ function messageFromBody(body: unknown, fallback: string): string {
   return fallback;
 }
 
-export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
+async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const accessToken = await getAccessToken();
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${accessToken}`);
@@ -83,20 +83,53 @@ export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  return fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers,
   });
+}
 
-  const text = await response.text();
-  let body: unknown = null;
-  if (text) {
+function parseBody(text: string): unknown {
+  if (!text) {
+    return null;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) {
+    return null;
+  }
+
+  const utf8Name = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+  if (utf8Name?.[1]) {
     try {
-      body = JSON.parse(text) as unknown;
+      const decoded = decodeURIComponent(utf8Name[1].trim());
+      if (decoded.length > 0) {
+        return decoded;
+      }
     } catch {
-      body = text;
+      // Fall through to the ASCII filename.
     }
   }
+
+  const quoted = /filename\s*=\s*"([^"]+)"/i.exec(header);
+  if (quoted?.[1]?.trim()) {
+    return quoted[1].trim();
+  }
+
+  const unquoted = /filename\s*=\s*([^;]+)/i.exec(header);
+  const fallback = unquoted?.[1]?.trim();
+  return fallback && fallback.length > 0 ? fallback : null;
+}
+
+export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await authorizedFetch(path, init);
+  const body = parseBody(await response.text());
 
   if (!response.ok) {
     throw new ApiError(
@@ -106,4 +139,24 @@ export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}
   }
 
   return body as T;
+}
+
+export async function apiFetchBlob(
+  path: string,
+  init: RequestInit = {},
+): Promise<{ blob: Blob; filename: string | null }> {
+  const response = await authorizedFetch(path, init);
+
+  if (!response.ok) {
+    const body = parseBody(await response.text());
+    throw new ApiError(
+      messageFromBody(body, `Request failed (${response.status})`),
+      response.status,
+    );
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: filenameFromContentDisposition(response.headers.get("Content-Disposition")),
+  };
 }

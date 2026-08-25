@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  csvFilenameFromTableName,
+  downloadTableCsv,
   getTable,
   listRows,
   mutationErrorMessage,
@@ -20,7 +22,7 @@ import { Button } from "@/ui/components/ui/button";
 import { Input } from "@/ui/components/ui/input";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Add01Icon, ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { Add01Icon, ArrowLeft01Icon, Download01Icon } from "@hugeicons/core-free-icons";
 
 export function TableDetailPage() {
   const { tableId } = useParams();
@@ -97,6 +99,18 @@ export function TableDetailPage() {
 
   const table = tableQuery.data;
   const total = knownTotal ?? 0;
+
+  const exportCsv = useMutation({
+    mutationFn: () =>
+      downloadTableCsv(tableId ?? "", {
+        fallbackFilename: csvFilenameFromTableName(table?.name ?? "table"),
+      }),
+  });
+
+  useEffect(() => {
+    exportCsv.reset();
+  }, [tableId, exportCsv.reset]);
+
   const headerContent = useMemo(
     () =>
       tableId ? (
@@ -171,17 +185,35 @@ export function TableDetailPage() {
           />
         ) : null}
 
-        <Button
-          type="button"
-          size="sm"
-          className="ml-auto shrink-0"
-          onClick={() => setAddColumnOpen(true)}
-        >
-          <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
-          Add column
-        </Button>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {table ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={exportCsv.isPending}
+              title={
+                table.filters.length > 0
+                  ? "Export filtered rows as CSV"
+                  : "Export visible columns as CSV"
+              }
+              onClick={() => exportCsv.mutate()}
+            >
+              <HugeiconsIcon icon={Download01Icon} strokeWidth={2} />
+              {exportCsv.isPending ? "Exporting…" : "Export CSV"}
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" onClick={() => setAddColumnOpen(true)}>
+            <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
+            Add column
+          </Button>
+        </div>
 
-        {loadError ? <p className="basis-full text-xs text-destructive">{loadError}</p> : null}
+        {loadError || exportCsv.error ? (
+          <p className="basis-full text-xs text-destructive">
+            {loadError || mutationErrorMessage(exportCsv.error, "Failed to export CSV")}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-1 md:px-6">

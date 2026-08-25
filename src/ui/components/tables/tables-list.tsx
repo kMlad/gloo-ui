@@ -3,7 +3,9 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
 import {
+  csvFilenameFromTableName,
   deleteTable,
+  downloadTableCsv,
   formatTableDate,
   mutationErrorMessage,
   tableKeys,
@@ -54,6 +56,13 @@ export function TablesList({ tables }: TablesListProps) {
     },
   });
 
+  const exportCsv = useMutation({
+    mutationFn: (table: TableListItem) =>
+      downloadTableCsv(table.id, {
+        fallbackFilename: csvFilenameFromTableName(table.name),
+      }),
+  });
+
   const columns = useMemo(
     () =>
       columnHelper.columns([
@@ -92,6 +101,14 @@ export function TablesList({ tables }: TablesListProps) {
                   <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    disabled={exportCsv.isPending}
+                    onClick={() => exportCsv.mutate(row.original)}
+                  >
+                    {exportCsv.isPending && exportCsv.variables?.id === row.original.id
+                      ? "Exporting…"
+                      : "Export CSV"}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setRenameTarget(row.original)}>
                     Rename
                   </DropdownMenuItem>
@@ -104,7 +121,7 @@ export function TablesList({ tables }: TablesListProps) {
           ),
         }),
       ]),
-    [],
+    [exportCsv.isPending, exportCsv.mutate, exportCsv.variables],
   );
 
   const table = useTable({
@@ -175,6 +192,12 @@ export function TablesList({ tables }: TablesListProps) {
           </TableBody>
         </Table>
       </div>
+
+      {exportCsv.error ? (
+        <p className="mt-2 text-sm text-destructive">
+          {mutationErrorMessage(exportCsv.error, "Failed to export CSV")}
+        </p>
+      ) : null}
 
       <RenameTableDialog
         open={renameTarget !== null}

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 
 export const primitiveColumnTypeSchema = z.enum(["text", "boolean"]);
 export type PrimitiveColumnType = z.infer<typeof primitiveColumnTypeSchema>;
@@ -335,6 +335,12 @@ export type ListRowsParams = {
   signal?: AbortSignal;
 };
 
+export type TableExportParams = {
+  sortColumnId?: string;
+  sortDirection?: "asc" | "desc";
+  fallbackFilename?: string;
+};
+
 export const tableKeys = {
   all: ["tables"] as const,
   detail: (tableId: string) => ["tables", tableId] as const,
@@ -366,6 +372,47 @@ export function importTableCsv(file: File, name?: string) {
     method: "POST",
     body: form,
   });
+}
+
+export function csvFilenameFromTableName(tableName: string) {
+  const stem = tableName.trim().replace(/[/\\"]+/g, "-").replace(/^[.\s-]+|[.\s-]+$/g, "") || "table";
+  return stem.toLowerCase().endsWith(".csv") ? stem : `${stem}.csv`;
+}
+
+export async function exportTableCsv(tableId: string, params: TableExportParams = {}) {
+  const search = new URLSearchParams();
+  if (params.sortColumnId) {
+    search.set("sort_column_id", params.sortColumnId);
+    search.set("sort_direction", params.sortDirection ?? "asc");
+  }
+  const query = search.toString();
+  const { blob, filename } = await apiFetchBlob(
+    `/tables/${tableId}/export${query ? `?${query}` : ""}`,
+  );
+  return {
+    blob,
+    filename: filename ?? params.fallbackFilename ?? "table.csv",
+  };
+}
+
+export function triggerBrowserDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function downloadTableCsv(tableId: string, params: TableExportParams = {}) {
+  const { blob, filename } = await exportTableCsv(tableId, params);
+  triggerBrowserDownload(blob, filename);
 }
 
 export function getTable(tableId: string) {
