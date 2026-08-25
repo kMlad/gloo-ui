@@ -261,6 +261,9 @@ export type ColumnUpdate = z.infer<typeof columnUpdateSchema>;
 export const filterOperatorSchema = z.enum(["eq", "contains", "is_empty", "is_not_empty"]);
 export type FilterOperator = z.infer<typeof filterOperatorSchema>;
 
+export const filterLogicSchema = z.enum(["and", "or"]);
+export type FilterLogic = z.infer<typeof filterLogicSchema>;
+
 export type CellValue = string | boolean | null | Record<string, unknown>;
 export type RowValues = Record<string, CellValue>;
 
@@ -294,6 +297,7 @@ export type TableFilter = {
   column_id: string;
   operator: FilterOperator;
   value?: CellValue;
+  logic?: FilterLogic;
 };
 
 export type TableResponse = {
@@ -547,6 +551,14 @@ export function filterOperatorNeedsValue(operator: FilterOperator): boolean {
   return operator !== "is_empty" && operator !== "is_not_empty";
 }
 
+export function normalizeFilterLogic(logic: unknown): FilterLogic {
+  return logic === "or" ? "or" : "and";
+}
+
+export function filterLogicLabel(logic: FilterLogic): string {
+  return logic === "or" ? "or" : "and";
+}
+
 export function filterOperatorLabel(operator: FilterOperator): string {
   if (operator === "eq") {
     return "is";
@@ -574,14 +586,16 @@ export function formatFilterValue(filter: TableFilter): string | null {
 }
 
 export function serializeTableFilters(filters: TableFilter[]): TableFilter[] {
-  return filters.map((filter) => {
+  return filters.map((filter, index) => {
+    const logic = index === 0 ? "and" : normalizeFilterLogic(filter.logic);
     if (!filterOperatorNeedsValue(filter.operator)) {
-      return { column_id: filter.column_id, operator: filter.operator };
+      return { column_id: filter.column_id, operator: filter.operator, logic };
     }
     return {
       column_id: filter.column_id,
       operator: filter.operator,
       value: filter.value,
+      logic,
     };
   });
 }
@@ -590,15 +604,17 @@ export function buildTableFilter(input: {
   column: ColumnResponse;
   operator: FilterOperator;
   value?: CellValue;
+  logic?: FilterLogic;
 }): { ok: true; filter: TableFilter } | { ok: false; error: string } {
   const allowed = operatorsForColumnType(input.column.type);
   if (!allowed.includes(input.operator)) {
     return { ok: false, error: "That operator is not valid for this column" };
   }
+  const logic = normalizeFilterLogic(input.logic);
   if (!filterOperatorNeedsValue(input.operator)) {
     return {
       ok: true,
-      filter: { column_id: input.column.id, operator: input.operator },
+      filter: { column_id: input.column.id, operator: input.operator, logic },
     };
   }
   if (input.operator === "contains") {
@@ -611,6 +627,7 @@ export function buildTableFilter(input: {
         column_id: input.column.id,
         operator: "contains",
         value: input.value.trim(),
+        logic,
       },
     };
   }
@@ -620,7 +637,7 @@ export function buildTableFilter(input: {
     }
     return {
       ok: true,
-      filter: { column_id: input.column.id, operator: "eq", value: input.value },
+      filter: { column_id: input.column.id, operator: "eq", value: input.value, logic },
     };
   }
   if (typeof input.value !== "string" || input.value.trim().length === 0) {
@@ -632,6 +649,7 @@ export function buildTableFilter(input: {
       column_id: input.column.id,
       operator: "eq",
       value: input.value.trim(),
+      logic,
     },
   };
 }

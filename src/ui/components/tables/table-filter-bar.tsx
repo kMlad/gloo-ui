@@ -2,14 +2,17 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   buildTableFilter,
+  filterLogicLabel,
   filterOperatorLabel,
   filterOperatorNeedsValue,
   formatFilterValue,
   mutationErrorMessage,
+  normalizeFilterLogic,
   operatorsForColumnType,
   replaceTableFilters,
   tableKeys,
   type ColumnResponse,
+  type FilterLogic,
   type FilterOperator,
   type TableFilter,
 } from "@/lib/tables";
@@ -36,6 +39,7 @@ const nativeSelectClass =
 export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: TableFilterBarProps) {
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [draftLogic, setDraftLogic] = useState<FilterLogic>("and");
 
   const columnsById = useMemo(
     () => new Map(columns.map((column) => [column.id, column])),
@@ -64,31 +68,54 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
     save.mutate(nextFilters);
   }
 
+  function setFilterLogic(index: number, logic: FilterLogic) {
+    persist(
+      filters.map((filter, current) => (current === index ? { ...filter, logic } : filter)),
+    );
+  }
+
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1.5">
       <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
         {filters.map((filter, index) => {
           if (editor?.mode === "edit" && editor.index === index) {
             return (
-              <FilterEditor
-                key={`edit-${index}`}
-                columns={filterableColumns}
-                initial={filter}
-                disabled={save.isPending}
-                onCancel={() => setEditor(null)}
-                onSave={(next) => {
-                  const nextFilters = [...filters];
-                  nextFilters[index] = next;
-                  persist(nextFilters);
-                }}
-              />
+              <span key={`edit-${index}`} className="inline-flex shrink-0 items-center">
+                {index > 0 ? (
+                  <FilterLogicToggle
+                    value={normalizeFilterLogic(filter.logic)}
+                    disabled={save.isPending}
+                    onChange={(logic) => setFilterLogic(index, logic)}
+                  />
+                ) : null}
+                <FilterEditor
+                  columns={filterableColumns}
+                  initial={filter}
+                  disabled={save.isPending}
+                  onCancel={() => setEditor(null)}
+                  onSave={(next) => {
+                    const nextFilters = [...filters];
+                    nextFilters[index] = {
+                      ...next,
+                      logic: index === 0 ? "and" : normalizeFilterLogic(filter.logic),
+                    };
+                    persist(nextFilters);
+                  }}
+                />
+              </span>
             );
           }
           const column = columnsById.get(filter.column_id);
           const valueLabel = formatFilterValue(filter);
           return (
             <span key={`${filter.column_id}-${index}`} className="inline-flex shrink-0 items-center">
-              {index > 0 ? <span className="mr-1.5 text-xs text-muted-foreground">and</span> : null}
+              {index > 0 ? (
+                <FilterLogicToggle
+                  value={normalizeFilterLogic(filter.logic)}
+                  disabled={save.isPending}
+                  onChange={(logic) => setFilterLogic(index, logic)}
+                />
+              ) : null}
               <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/40">
                 <button
                   type="button"
@@ -116,19 +143,36 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
         })}
 
         {editor?.mode === "new" ? (
-          <FilterEditor
-            columns={filterableColumns}
-            disabled={save.isPending}
-            onCancel={() => setEditor(null)}
-            onSave={(next) => persist([...filters, next])}
-          />
+          <span className="inline-flex shrink-0 items-center">
+            {filters.length > 0 ? (
+              <FilterLogicToggle
+                value={draftLogic}
+                disabled={save.isPending}
+                onChange={setDraftLogic}
+              />
+            ) : null}
+            <FilterEditor
+              columns={filterableColumns}
+              disabled={save.isPending}
+              onCancel={() => setEditor(null)}
+              onSave={(next) =>
+                persist([
+                  ...filters,
+                  { ...next, logic: filters.length === 0 ? "and" : draftLogic },
+                ])
+              }
+            />
+          </span>
         ) : (
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={filterableColumns.length === 0 || save.isPending}
-            onClick={() => setEditor({ mode: "new" })}
+            onClick={() => {
+              setDraftLogic("and");
+              setEditor({ mode: "new" });
+            }}
           >
             <HugeiconsIcon icon={FilterIcon} strokeWidth={2} />
             Add filter
@@ -143,6 +187,33 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
       </div>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
+  );
+}
+
+type FilterLogicToggleProps = {
+  value: FilterLogic;
+  disabled?: boolean;
+  onChange: (logic: FilterLogic) => void;
+};
+
+function FilterLogicToggle({ value, disabled = false, onChange }: FilterLogicToggleProps) {
+  const next = value === "or" ? "and" : "or";
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title="Filters are evaluated left to right. Click to switch between and/or."
+      aria-label={`Join with ${filterLogicLabel(value)}. Click to switch to ${next}.`}
+      className={cn(
+        "mr-1.5 inline-flex h-5 shrink-0 items-center justify-center rounded-sm px-1.5 text-[11px] font-semibold tracking-wide uppercase transition-colors",
+        value === "or"
+          ? "bg-foreground/10 text-foreground hover:bg-foreground/16"
+          : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+      )}
+      onClick={() => onChange(next)}
+    >
+      {filterLogicLabel(value)}
+    </button>
   );
 }
 
