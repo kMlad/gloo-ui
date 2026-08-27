@@ -15,6 +15,7 @@ import {
   type PrimitiveColumnType,
 } from "@/lib/tables";
 import { EmailEnrichmentColumnForm } from "@/ui/components/tables/email-enrichment-column-form";
+import { EmailValidationColumnForm } from "@/ui/components/tables/email-validation-column-form";
 import { Button } from "@/ui/components/ui/button";
 import {
   Drawer,
@@ -33,6 +34,7 @@ import {
   ArrowLeft01Icon,
   Cancel01Icon,
   MailSearch01Icon,
+  MailValidation01Icon,
   Sheriff01Icon,
   TextFontIcon,
   UnfoldMoreIcon,
@@ -65,7 +67,7 @@ function slashMentionAt(text: string, cursor: number): SlashMention | null {
   return { start: cursor - match[1].length, query: match[2] };
 }
 
-type DrawerView = "picker" | "regular" | "sheriff" | "email_enrichment";
+type DrawerView = "picker" | "regular" | "sheriff" | "email_enrichment" | "email_validation";
 
 type DraftOutput = {
   id: string;
@@ -285,7 +287,9 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
         ? "Sheriff"
         : view === "email_enrichment"
           ? "Find work email"
-          : "Add column";
+          : view === "email_validation"
+            ? "Verify email"
+            : "Add column";
   const description =
     view === "regular"
       ? "Text or boolean. Column type cannot be changed later."
@@ -293,7 +297,9 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
         ? "Research the web and write results into output columns."
         : view === "email_enrichment"
           ? "Look up a work email from name, company, and LinkedIn."
-          : "Choose the kind of column to add.";
+          : view === "email_validation"
+            ? "Check an existing email column with MillionVerifier."
+            : "Choose the kind of column to add.";
 
   return (
     <Drawer open={open} onOpenChange={handleOpenChange} swipeDirection="right">
@@ -345,6 +351,12 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
                 title="Find work email"
                 description="Look up a work email from name, company, and LinkedIn."
                 onClick={() => setView("email_enrichment")}
+              />
+              <ColumnTypeOption
+                icon={MailValidation01Icon}
+                title="Verify email"
+                description="Check an existing email column with MillionVerifier."
+                onClick={() => setView("email_validation")}
               />
             </div>
             <DrawerFooter className="flex-row justify-end">
@@ -597,6 +609,26 @@ export function AddColumnDrawer({ open, onOpenChange, tableId, columns }: AddCol
                 name: input.name,
                 type: "email_enrichment",
                 email_enrichment: input.email_enrichment,
+              });
+            }}
+          />
+        ) : null}
+
+        {view === "email_validation" ? (
+          <EmailValidationColumnForm
+            columns={columns}
+            pending={create.isPending}
+            error={mutationErrorMessage(create.error, create.isError ? "Failed to add column" : "")}
+            submitLabel="Add column"
+            pendingLabel="Adding…"
+            onCancel={() => handleOpenChange(false)}
+            onSubmit={(input) => {
+              setValidationError(null);
+              create.reset();
+              create.mutate({
+                name: input.name,
+                type: "email_validation",
+                email_validation: input.email_validation,
               });
             }}
           />

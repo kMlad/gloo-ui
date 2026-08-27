@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  addRow,
   computedInFlightStatus,
   deleteColumn,
   deleteRow,
@@ -25,6 +26,8 @@ import { tableGridFeatures, type TableGridFeatures } from "@/ui/components/table
 import { BooleanCell, EditableTextCell } from "@/ui/components/tables/editable-cell";
 import { EmailEnrichmentCell } from "@/ui/components/tables/email-enrichment-cell";
 import { EmailEnrichmentRunDrawer } from "@/ui/components/tables/email-enrichment-run-drawer";
+import { EmailValidationCell } from "@/ui/components/tables/email-validation-cell";
+import { EmailValidationRunDrawer } from "@/ui/components/tables/email-validation-run-drawer";
 import { SheriffCell } from "@/ui/components/tables/sheriff-cell";
 import { SheriffRunDrawer } from "@/ui/components/tables/sheriff-run-drawer";
 import { ConfirmDeleteDialog } from "@/ui/components/tables/confirm-delete-dialog";
@@ -55,6 +58,7 @@ import {
 import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  Add01Icon,
   ArrowDown01Icon,
   ArrowUp01Icon,
   BanIcon,
@@ -114,7 +118,7 @@ function dataColumnWidth(column: ColumnResponse) {
   if (column.type === "boolean") {
     return 88;
   }
-  if (column.type === "sheriff" || column.type === "email_enrichment") {
+  if (column.type === "sheriff" || column.type === "email_enrichment" || column.type === "email_validation") {
     return 144;
   }
   return 160;
@@ -199,6 +203,28 @@ export function TableDataGrid({
       updateRow(tableId, rowId, { values: { [columnId]: value } }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId) });
+    },
+  });
+
+  const createRow = useMutation({
+    mutationFn: () => addRow(tableId),
+    onSuccess: async (created) => {
+      if (!filterActive) {
+        queryClient.setQueriesData<RowListResponse>({ queryKey: tableKeys.rowList(tableId) }, (current) => {
+          if (!current) {
+            return current;
+          }
+          const isLastPage = current.offset + current.items.length >= current.total;
+          const hasRoom = current.items.length < current.limit;
+          return {
+            ...current,
+            total: current.total + 1,
+            items: isLastPage && hasRoom ? [...current.items, created] : current.items,
+          };
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId) });
+      await queryClient.invalidateQueries({ queryKey: tableKeys.all });
     },
   });
 
@@ -495,7 +521,7 @@ export function TableDataGrid({
                           <DropdownMenuSeparator />
                         </>
                       ) : null}
-                      {column.type === "email_enrichment" ? (
+                      {column.type === "email_enrichment" || column.type === "email_validation" ? (
                         <DropdownMenuItem onClick={() => setEditColumn(column)}>Edit</DropdownMenuItem>
                       ) : null}
                       <DropdownMenuItem onClick={() => setRenameColumn(column)}>Rename</DropdownMenuItem>
@@ -530,6 +556,19 @@ export function TableDataGrid({
                 />
               ) : column.type === "email_enrichment" ? (
                 <EmailEnrichmentCell
+                  value={getValue()}
+                  pending={pendingRuns.has(sheriffRunKey(row.original.id, column.id))}
+                  onRun={() =>
+                    runSheriff.mutate({
+                      rowIds: [row.original.id],
+                      columnId: column.id,
+                      overwrite: false,
+                    })
+                  }
+                  onOpen={() => setInspected({ rowId: row.original.id, columnId: column.id })}
+                />
+              ) : column.type === "email_validation" ? (
+                <EmailValidationCell
                   value={getValue()}
                   pending={pendingRuns.has(sheriffRunKey(row.original.id, column.id))}
                   onRun={() =>
@@ -675,7 +714,9 @@ export function TableDataGrid({
           runSheriff.isError
             ? inspectedColumn?.type === "email_enrichment"
               ? "Failed to find work email"
-              : "Failed to run research"
+              : inspectedColumn?.type === "email_validation"
+                ? "Failed to verify email"
+                : "Failed to run research"
             : "",
         )
       : null;
@@ -964,20 +1005,36 @@ export function TableDataGrid({
                   </TableRow>
                 ) : null}
               </>
-            ) : (
+            ) : filterActive ? (
               <TableRow>
                 <TableCell colSpan={tableColumns.length} className="h-24 text-center text-muted-foreground">
-                  {filterActive
-                    ? "No rows match the current filters."
-                    : "No rows yet. Add a row to get started."}
+                  No rows match the current filters.
                 </TableCell>
               </TableRow>
-            )}
+            ) : null}
+            <TableRow className="h-9 hover:bg-muted/40">
+              <TableCell className={cn(rowNumberColumnClass, "p-0")}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Add row"
+                  disabled={createRow.isPending}
+                  className="size-full rounded-none text-muted-foreground hover:text-foreground"
+                  onClick={() => createRow.mutate()}
+                >
+                  <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
+                </Button>
+              </TableCell>
+              <TableCell colSpan={displayColumns.length + 1} className="px-1.5 py-1">
+                <span className="sr-only">Add row</span>
+              </TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </div>
 
-      {moveColumns.error || hideColumn.error || runSheriff.error ? (
+      {moveColumns.error || hideColumn.error || runSheriff.error || createRow.error ? (
         <p className="shrink-0 text-sm text-destructive">
           {mutationErrorMessage(
             moveColumns.error,
@@ -987,7 +1044,8 @@ export function TableDataGrid({
             mutationErrorMessage(
               runSheriff.error,
               runSheriff.isError ? "Failed to run selected cells" : "",
-            )}
+            ) ||
+            mutationErrorMessage(createRow.error, createRow.isError ? "Failed to add row" : "")}
         </p>
       ) : null}
 
@@ -1054,6 +1112,33 @@ export function TableDataGrid({
           }
         }}
         columnName={inspectedColumn?.name ?? "Work email"}
+        value={inspectedRow?.values[inspected?.columnId ?? ""]}
+        inFlight={inspectedInFlight}
+        rerunPending={inspectedRerunPending}
+        error={inspectedRunError}
+        onRerun={() => {
+          if (!inspected) {
+            return;
+          }
+          runSheriff.mutate({
+            rowIds: [inspected.rowId],
+            columnId: inspected.columnId,
+            overwrite: true,
+          });
+        }}
+      />
+
+      <EmailValidationRunDrawer
+        open={inspectedColumn?.type === "email_validation"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInspected(null);
+            if (!runSheriff.isPending) {
+              runSheriff.reset();
+            }
+          }
+        }}
+        columnName={inspectedColumn?.name ?? "Email valid"}
         value={inspectedRow?.values[inspected?.columnId ?? ""]}
         inFlight={inspectedInFlight}
         rerunPending={inspectedRerunPending}

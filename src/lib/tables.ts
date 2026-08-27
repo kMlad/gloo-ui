@@ -4,11 +4,19 @@ import { apiFetch, apiFetchBlob } from "@/lib/api";
 export const primitiveColumnTypeSchema = z.enum(["text", "boolean"]);
 export type PrimitiveColumnType = z.infer<typeof primitiveColumnTypeSchema>;
 
-export const columnTypeSchema = z.enum(["text", "boolean", "sheriff", "email_enrichment"]);
+export const columnTypeSchema = z.enum([
+  "text",
+  "boolean",
+  "sheriff",
+  "email_enrichment",
+  "email_validation",
+]);
 export type ColumnType = z.infer<typeof columnTypeSchema>;
 
-export function isComputedColumnType(type: string): type is "sheriff" | "email_enrichment" {
-  return type === "sheriff" || type === "email_enrichment";
+export function isComputedColumnType(
+  type: string,
+): type is "sheriff" | "email_enrichment" | "email_validation" {
+  return type === "sheriff" || type === "email_enrichment" || type === "email_validation";
 }
 
 const columnNameSchema = z.string().trim().min(1, "Column name is required").max(200);
@@ -114,10 +122,24 @@ export const emailEnrichmentColumnCreateSchema = z.object({
   email_enrichment: emailEnrichmentConfigSchema,
 });
 
+export const emailValidationConfigSchema = z.object({
+  email_column_id: emailInputColumnIdSchema,
+  validator: emailValidatorSchema.default("millionverifier"),
+  accept_catchall: z.boolean().default(false),
+});
+export type EmailValidationConfig = z.infer<typeof emailValidationConfigSchema>;
+
+export const emailValidationColumnCreateSchema = z.object({
+  name: columnNameSchema,
+  type: z.literal("email_validation"),
+  email_validation: emailValidationConfigSchema,
+});
+
 export const columnCreateSchema = z.discriminatedUnion("type", [
   primitiveColumnCreateSchema,
   sheriffColumnCreateSchema,
   emailEnrichmentColumnCreateSchema,
+  emailValidationColumnCreateSchema,
 ]);
 export type ColumnCreate = z.infer<typeof columnCreateSchema>;
 
@@ -196,6 +218,25 @@ export const emailEnrichmentCellSchema = z.object({
 });
 export type EmailEnrichmentCell = z.infer<typeof emailEnrichmentCellSchema>;
 
+export const emailValidationCellStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "skipped",
+]);
+export type EmailValidationCellStatus = z.infer<typeof emailValidationCellStatusSchema>;
+
+export const emailValidationCellSchema = z.object({
+  status: emailValidationCellStatusSchema,
+  email: z.string().nullish(),
+  validator: z.string().nullish(),
+  result: z.string().nullish(),
+  valid: z.boolean().nullish(),
+  error: z.string().nullish(),
+});
+export type EmailValidationCell = z.infer<typeof emailValidationCellSchema>;
+
 export type SheriffRunCreate = {
   row_ids?: string[];
   overwrite?: boolean;
@@ -248,10 +289,14 @@ export const columnUpdateSchema = z
     name: z.string().trim().min(1, "Column name is required").max(200).optional(),
     hidden: z.boolean().optional(),
     email_enrichment: emailEnrichmentConfigSchema.optional(),
+    email_validation: emailValidationConfigSchema.optional(),
   })
   .refine(
     (value) =>
-      value.name !== undefined || value.hidden !== undefined || value.email_enrichment !== undefined,
+      value.name !== undefined ||
+      value.hidden !== undefined ||
+      value.email_enrichment !== undefined ||
+      value.email_validation !== undefined,
     {
       message: "At least one field is required",
     },
@@ -680,6 +725,24 @@ export function parseEmailEnrichmentConfig(
   return parsed.success ? parsed.data : null;
 }
 
+export function parseEmailValidationCell(value: CellValue | undefined): EmailValidationCell | null {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const parsed = emailValidationCellSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseEmailValidationConfig(
+  config: Record<string, unknown> | null | undefined,
+): EmailValidationConfig | null {
+  if (config == null) {
+    return null;
+  }
+  const parsed = emailValidationConfigSchema.safeParse(config);
+  return parsed.success ? parsed.data : null;
+}
+
 export function sheriffCellIsActive(value: CellValue | undefined): boolean {
   const status = parseSheriffCell(value)?.status;
   return status === "queued" || status === "running";
@@ -691,6 +754,11 @@ export function sheriffCellIsFailed(value: CellValue | undefined): boolean {
 
 export function emailEnrichmentCellIsActive(value: CellValue | undefined): boolean {
   const status = parseEmailEnrichmentCell(value)?.status;
+  return status === "queued" || status === "running";
+}
+
+export function emailValidationCellIsActive(value: CellValue | undefined): boolean {
+  const status = parseEmailValidationCell(value)?.status;
   return status === "queued" || status === "running";
 }
 
@@ -721,6 +789,13 @@ export function emailEnrichmentInFlightStatus(
   return inFlightStatusFrom(parseEmailEnrichmentCell(value)?.status, pending);
 }
 
+export function emailValidationInFlightStatus(
+  value: CellValue | undefined,
+  pending = false,
+): "queued" | "running" | null {
+  return inFlightStatusFrom(parseEmailValidationCell(value)?.status, pending);
+}
+
 export function computedInFlightStatus(
   type: string,
   value: CellValue | undefined,
@@ -729,12 +804,18 @@ export function computedInFlightStatus(
   if (type === "email_enrichment") {
     return emailEnrichmentInFlightStatus(value, pending);
   }
+  if (type === "email_validation") {
+    return emailValidationInFlightStatus(value, pending);
+  }
   return sheriffInFlightStatus(value, pending);
 }
 
 function computedCellIsActive(type: string, value: CellValue | undefined): boolean {
   if (type === "email_enrichment") {
     return emailEnrichmentCellIsActive(value);
+  }
+  if (type === "email_validation") {
+    return emailValidationCellIsActive(value);
   }
   if (type === "sheriff") {
     return sheriffCellIsActive(value);

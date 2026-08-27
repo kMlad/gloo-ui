@@ -3,12 +3,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   mutationErrorMessage,
   parseEmailEnrichmentConfig,
+  parseEmailValidationConfig,
   tableKeys,
   updateColumn,
   type ColumnResponse,
-  type EmailEnrichmentConfig,
+  type ColumnUpdate,
 } from "@/lib/tables";
 import { EmailEnrichmentColumnForm } from "@/ui/components/tables/email-enrichment-column-form";
+import { EmailValidationColumnForm } from "@/ui/components/tables/email-validation-column-form";
 import { Button } from "@/ui/components/ui/button";
 import {
   Drawer,
@@ -38,8 +40,12 @@ export function EditColumnDrawer({
   columns,
 }: EditColumnDrawerProps) {
   const queryClient = useQueryClient();
-  const config = useMemo(
+  const enrichmentConfig = useMemo(
     () => (column?.type === "email_enrichment" ? parseEmailEnrichmentConfig(column.config) : null),
+    [column],
+  );
+  const validationConfig = useMemo(
+    () => (column?.type === "email_validation" ? parseEmailValidationConfig(column.config) : null),
     [column],
   );
   const excludeColumnIds = useMemo(
@@ -48,7 +54,7 @@ export function EditColumnDrawer({
   );
 
   const save = useMutation({
-    mutationFn: (input: { name: string; email_enrichment: EmailEnrichmentConfig }) => {
+    mutationFn: (input: ColumnUpdate) => {
       if (!column) {
         throw new Error("Column is required");
       }
@@ -73,6 +79,8 @@ export function EditColumnDrawer({
   }
 
   const error = mutationErrorMessage(save.error, save.isError ? "Failed to update column" : "");
+  const isEnrichment = column?.type === "email_enrichment";
+  const isValidation = column?.type === "email_validation";
 
   return (
     <Drawer open={open} onOpenChange={handleOpenChange} swipeDirection="right">
@@ -80,7 +88,9 @@ export function EditColumnDrawer({
         <DrawerHeader className="relative pr-12">
           <DrawerTitle>Edit column</DrawerTitle>
           <DrawerDescription>
-            Update providers, mappings, and whether catch-all emails count as valid.
+            {isValidation
+              ? "Update the email column and whether catch-all emails count as valid."
+              : "Update providers, mappings, and whether catch-all emails count as valid."}
           </DrawerDescription>
           <DrawerClose
             disabled={save.isPending}
@@ -91,15 +101,30 @@ export function EditColumnDrawer({
           </DrawerClose>
         </DrawerHeader>
 
-        {column && config ? (
+        {column && isEnrichment && enrichmentConfig ? (
           <EmailEnrichmentColumnForm
             key={column.id}
             columns={columns}
             excludeColumnIds={excludeColumnIds}
             initialName={column.name}
-            initialConfig={config}
-            acceptCatchallLocked={config.accept_catchall}
+            initialConfig={enrichmentConfig}
+            acceptCatchallLocked={enrichmentConfig.accept_catchall}
             idPrefix="edit-email-enrichment"
+            pending={save.isPending}
+            error={error}
+            submitLabel="Save"
+            pendingLabel="Saving…"
+            onCancel={() => handleOpenChange(false)}
+            onSubmit={(input) => save.mutate(input)}
+          />
+        ) : column && isValidation && validationConfig ? (
+          <EmailValidationColumnForm
+            key={column.id}
+            columns={columns}
+            excludeColumnIds={excludeColumnIds}
+            initialName={column.name}
+            initialConfig={validationConfig}
+            idPrefix="edit-email-validation"
             pending={save.isPending}
             error={error}
             submitLabel="Save"
