@@ -521,7 +521,9 @@ export function TableDataGrid({
                           <DropdownMenuSeparator />
                         </>
                       ) : null}
-                      {column.type === "email_enrichment" || column.type === "email_validation" ? (
+                      {column.type === "sheriff" ||
+                      column.type === "email_enrichment" ||
+                      column.type === "email_validation" ? (
                         <DropdownMenuItem onClick={() => setEditColumn(column)}>Edit</DropdownMenuItem>
                       ) : null}
                       <DropdownMenuItem onClick={() => setRenameColumn(column)}>Rename</DropdownMenuItem>

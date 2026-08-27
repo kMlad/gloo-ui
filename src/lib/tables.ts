@@ -34,11 +34,52 @@ export const sheriffOutputFieldSchema = z.object({
 });
 export type SheriffOutputField = z.infer<typeof sheriffOutputFieldSchema>;
 
+export const SHERIFF_MODELS = [
+  "openai/gpt-5.6-sol",
+  "openai/gpt-5.6-terra",
+  "openai/gpt-5.6-luna",
+  "openai/gpt-5.5",
+  "openai/gpt-5.4",
+  "openai/gpt-5.4-mini",
+  "openai/gpt-5.4-nano",
+  "openai/gpt-5.2",
+  "openai/gpt-5.1",
+  "openai/gpt-5",
+  "openai/gpt-5-mini",
+] as const;
+export const sheriffModelSchema = z.enum(SHERIFF_MODELS);
+export type SheriffModel = z.infer<typeof sheriffModelSchema>;
+export const DEFAULT_SHERIFF_MODEL: SheriffModel = "openai/gpt-5.4-mini";
+export const DEFAULT_SHERIFF_WEB_SEARCH = true;
+
+export const SHERIFF_MODEL_LABELS: Record<SheriffModel, string> = {
+  "openai/gpt-5.6-sol": "GPT-5.6 Sol",
+  "openai/gpt-5.6-terra": "GPT-5.6 Terra",
+  "openai/gpt-5.6-luna": "GPT-5.6 Luna",
+  "openai/gpt-5.5": "GPT-5.5",
+  "openai/gpt-5.4": "GPT-5.4",
+  "openai/gpt-5.4-mini": "GPT-5.4 Mini",
+  "openai/gpt-5.4-nano": "GPT-5.4 Nano",
+  "openai/gpt-5.2": "GPT-5.2",
+  "openai/gpt-5.1": "GPT-5.1",
+  "openai/gpt-5": "GPT-5",
+  "openai/gpt-5-mini": "GPT-5 Mini",
+};
+
+export function sheriffModelLabel(model: string): string {
+  if (model in SHERIFF_MODEL_LABELS) {
+    return SHERIFF_MODEL_LABELS[model as SheriffModel];
+  }
+  return model.replace(/^openai\//, "");
+}
+
 export const sheriffConfigSchema = z
   .object({
     user_prompt: z.string().trim().min(1, "Prompt is required").max(8000),
     enhanced_prompt: z.string().trim().max(16_000).nullish(),
     outputs: z.array(sheriffOutputFieldSchema).min(1, "Add at least one output").max(10),
+    web_search: z.boolean().default(DEFAULT_SHERIFF_WEB_SEARCH),
+    model: sheriffModelSchema.default(DEFAULT_SHERIFF_MODEL),
   })
   .refine(
     (config) => {
@@ -159,6 +200,12 @@ export type SheriffExpandResponse = {
   enhanced_prompt: string;
   outputs: SheriffOutputField[];
   input_columns: SheriffInputColumn[];
+};
+
+export type SheriffOptionsResponse = {
+  models: string[];
+  default_model: string;
+  default_web_search: boolean;
 };
 
 export const sheriffCellStatusSchema = z.enum(["queued", "running", "succeeded", "failed"]);
@@ -288,6 +335,7 @@ export const columnUpdateSchema = z
   .object({
     name: z.string().trim().min(1, "Column name is required").max(200).optional(),
     hidden: z.boolean().optional(),
+    sheriff: sheriffConfigSchema.optional(),
     email_enrichment: emailEnrichmentConfigSchema.optional(),
     email_validation: emailValidationConfigSchema.optional(),
   })
@@ -295,6 +343,7 @@ export const columnUpdateSchema = z
     (value) =>
       value.name !== undefined ||
       value.hidden !== undefined ||
+      value.sheriff !== undefined ||
       value.email_enrichment !== undefined ||
       value.email_validation !== undefined,
     {
@@ -396,6 +445,7 @@ export const tableKeys = {
   rowList: (tableId: string) => ["tables", tableId, "rows"] as const,
   rows: (tableId: string, params: { limit: number; offset: number }) =>
     ["tables", tableId, "rows", params] as const,
+  sheriffOptions: (tableId: string) => ["tables", tableId, "sheriff-options"] as const,
 };
 
 export const ROW_PAGE_SIZE = 100;
@@ -504,6 +554,10 @@ export function expandSheriffPrompt(tableId: string, input: SheriffExpandRequest
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function getSheriffOptions(tableId: string) {
+  return apiFetch<SheriffOptionsResponse>(`/tables/${tableId}/sheriff/options`);
 }
 
 export function startSheriffRun(tableId: string, columnId: string, input: SheriffRunCreate = {}) {
@@ -740,6 +794,21 @@ export function parseEmailValidationConfig(
     return null;
   }
   const parsed = emailValidationConfigSchema.safeParse(config);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseSheriffConfig(
+  config: Record<string, unknown> | null | undefined,
+): SheriffConfig | null {
+  if (config == null) {
+    return null;
+  }
+  const model = sheriffModelSchema.safeParse(config.model);
+  const parsed = sheriffConfigSchema.safeParse({
+    ...config,
+    web_search: typeof config.web_search === "boolean" ? config.web_search : DEFAULT_SHERIFF_WEB_SEARCH,
+    model: model.success ? model.data : DEFAULT_SHERIFF_MODEL,
+  });
   return parsed.success ? parsed.data : null;
 }
 
