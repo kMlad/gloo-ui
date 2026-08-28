@@ -51,6 +51,8 @@ export const sheriffModelSchema = z.enum(SHERIFF_MODELS);
 export type SheriffModel = z.infer<typeof sheriffModelSchema>;
 export const DEFAULT_SHERIFF_MODEL: SheriffModel = "openai/gpt-5.4-mini";
 export const DEFAULT_SHERIFF_WEB_SEARCH = true;
+export const SHERIFF_WEB_SEARCH_LIMIT_MIN = 1;
+export const SHERIFF_WEB_SEARCH_LIMIT_MAX = 20;
 
 export const SHERIFF_MODEL_LABELS: Record<SheriffModel, string> = {
   "openai/gpt-5.6-sol": "GPT-5.6 Sol",
@@ -79,6 +81,12 @@ export const sheriffConfigSchema = z
     enhanced_prompt: z.string().trim().max(16_000).nullish(),
     outputs: z.array(sheriffOutputFieldSchema).min(1, "Add at least one output").max(10),
     web_search: z.boolean().default(DEFAULT_SHERIFF_WEB_SEARCH),
+    web_search_limit: z
+      .number()
+      .int()
+      .min(SHERIFF_WEB_SEARCH_LIMIT_MIN, "Web search limit must be between 1 and 20")
+      .max(SHERIFF_WEB_SEARCH_LIMIT_MAX, "Web search limit must be between 1 and 20")
+      .optional(),
     model: sheriffModelSchema.default(DEFAULT_SHERIFF_MODEL),
   })
   .refine(
@@ -807,6 +815,13 @@ export function parseSheriffConfig(
   const parsed = sheriffConfigSchema.safeParse({
     ...config,
     web_search: typeof config.web_search === "boolean" ? config.web_search : DEFAULT_SHERIFF_WEB_SEARCH,
+    web_search_limit:
+      typeof config.web_search_limit === "number" &&
+      Number.isInteger(config.web_search_limit) &&
+      config.web_search_limit >= SHERIFF_WEB_SEARCH_LIMIT_MIN &&
+      config.web_search_limit <= SHERIFF_WEB_SEARCH_LIMIT_MAX
+        ? config.web_search_limit
+        : undefined,
     model: model.success ? model.data : DEFAULT_SHERIFF_MODEL,
   });
   return parsed.success ? parsed.data : null;
@@ -877,6 +892,19 @@ export function computedInFlightStatus(
     return emailValidationInFlightStatus(value, pending);
   }
   return sheriffInFlightStatus(value, pending);
+}
+
+export function computedCellIsSucceeded(type: string, value: CellValue | undefined): boolean {
+  if (type === "email_enrichment") {
+    return parseEmailEnrichmentCell(value)?.status === "succeeded";
+  }
+  if (type === "email_validation") {
+    return parseEmailValidationCell(value)?.status === "succeeded";
+  }
+  if (type === "sheriff") {
+    return parseSheriffCell(value)?.status === "succeeded";
+  }
+  return false;
 }
 
 function computedCellIsActive(type: string, value: CellValue | undefined): boolean {

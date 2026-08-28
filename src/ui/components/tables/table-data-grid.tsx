@@ -4,6 +4,7 @@ import { createColumnHelper, useTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   addRow,
+  computedCellIsSucceeded,
   computedInFlightStatus,
   deleteColumn,
   deleteRow,
@@ -17,6 +18,7 @@ import {
   updateColumn,
   updateRow,
   visibleColumns,
+  type CellValue,
   type ColumnResponse,
   type RowResponse,
   type RowListResponse,
@@ -62,6 +64,7 @@ import {
   ArrowDown01Icon,
   ArrowUp01Icon,
   BanIcon,
+  Loading03Icon,
   MoreVerticalIcon,
   PlayIcon,
   Refresh01Icon,
@@ -95,6 +98,37 @@ function failedSheriffRowIds(
   });
 }
 
+function cellRunIsPending(
+  rowId: string,
+  columnId: string,
+  columnType: string,
+  value: CellValue | undefined,
+  pendingRuns: Set<string>,
+  pendingColumnRuns: Set<string>,
+) {
+  if (pendingRuns.has(sheriffRunKey(rowId, columnId))) {
+    return true;
+  }
+  if (!pendingColumnRuns.has(columnId)) {
+    return false;
+  }
+  if (computedInFlightStatus(columnType, value)) {
+    return false;
+  }
+  return !computedCellIsSucceeded(columnType, value);
+}
+
+function mutationTargetsRow(
+  variables: { rowIds?: string[]; columnId: string } | undefined,
+  rowId: string,
+  columnId: string,
+) {
+  if (!variables || variables.columnId !== columnId) {
+    return false;
+  }
+  return variables.rowIds ? variables.rowIds.includes(rowId) : true;
+}
+
 function rowIdsBetween(orderedRowIds: string[], fromId: string, toId: string) {
   const fromIndex = orderedRowIds.indexOf(fromId);
   const toIndex = orderedRowIds.indexOf(toId);
@@ -119,7 +153,7 @@ function dataColumnWidth(column: ColumnResponse) {
     return 88;
   }
   if (column.type === "sheriff" || column.type === "email_enrichment" || column.type === "email_validation") {
-    return 144;
+    return 168;
   }
   return 160;
 }
@@ -172,6 +206,7 @@ export function TableDataGrid({
   const [deleteColumnTarget, setDeleteColumnTarget] = useState<ColumnResponse | null>(null);
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
   const [pendingRuns, setPendingRuns] = useState<Set<string>>(() => new Set());
+  const [pendingColumnRuns, setPendingColumnRuns] = useState<Set<string>>(() => new Set());
   const [inspected, setInspected] = useState<{ rowId: string; columnId: string } | null>(null);
   const [sheriffSelection, setSheriffSelection] = useState<SheriffSelection | null>(null);
   const draggingIdRef = useRef<string | null>(null);
@@ -234,11 +269,23 @@ export function TableDataGrid({
       columnId,
       overwrite,
     }: {
-      rowIds: string[];
+      rowIds?: string[];
       columnId: string;
       overwrite: boolean;
-    }) => startSheriffRun(tableId, columnId, { row_ids: rowIds, overwrite }),
+    }) =>
+      startSheriffRun(tableId, columnId, {
+        ...(rowIds ? { row_ids: rowIds } : {}),
+        overwrite,
+      }),
     onMutate: ({ rowIds, columnId }) => {
+      if (!rowIds) {
+        setPendingColumnRuns((current) => {
+          const next = new Set(current);
+          next.add(columnId);
+          return next;
+        });
+        return;
+      }
       setPendingRuns((current) => {
         const next = new Set(current);
         for (const rowId of rowIds) {
@@ -252,6 +299,14 @@ export function TableDataGrid({
         queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId) }),
         queryClient.invalidateQueries({ queryKey: tableKeys.rowList(tableId) }),
       ]);
+      if (!rowIds) {
+        setPendingColumnRuns((current) => {
+          const next = new Set(current);
+          next.delete(columnId);
+          return next;
+        });
+        return;
+      }
       setPendingRuns((current) => {
         const next = new Set(current);
         for (const rowId of rowIds) {
@@ -261,6 +316,14 @@ export function TableDataGrid({
       });
     },
     onError: (_error, { rowIds, columnId }) => {
+      if (!rowIds) {
+        setPendingColumnRuns((current) => {
+          const next = new Set(current);
+          next.delete(columnId);
+          return next;
+        });
+        return;
+      }
       setPendingRuns((current) => {
         const next = new Set(current);
         for (const rowId of rowIds) {
@@ -336,7 +399,7 @@ export function TableDataGrid({
   const sheriffFailedColumns = useMemo(
     () =>
       displayColumns.flatMap((column) => {
-        if (column.type !== "sheriff") {
+        if (column.type !== "sheriff" || pendingColumnRuns.has(column.id)) {
           return [];
         }
         const rowIds = failedSheriffRowIds(
@@ -347,7 +410,7 @@ export function TableDataGrid({
         );
         return rowIds.length > 0 ? [{ column, rowIds }] : [];
       }),
-    [displayColumns, pendingRuns, rowById, rows],
+    [displayColumns, pendingColumnRuns, pendingRuns, rowById, rows],
   );
 
   function updateSheriffSelection(selection: SheriffSelection | null) {
@@ -451,8 +514,9 @@ export function TableDataGrid({
             header: ({ header }) => {
               const canSort = header.column.getCanSort();
               const sorted = header.column.getIsSorted();
+              const columnRunPending = pendingColumnRuns.has(column.id);
               return (
-                <div className="flex min-w-0 items-center gap-1">
+                <div className="flex min-w-0 items-center gap-0.5">
                   <span
                     draggable={canReorder}
                     aria-label={canReorder ? `Reorder ${column.name}` : undefined}
@@ -485,6 +549,30 @@ export function TableDataGrid({
                   >
                     {column.name}
                   </span>
+                  {isComputedColumnType(column.type) ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0"
+                      aria-label={`Run remaining rows in ${column.name}`}
+                      title="Run remaining rows"
+                      disabled={total === 0 || columnRunPending}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() =>
+                        runSheriff.mutate({
+                          columnId: column.id,
+                          overwrite: false,
+                        })
+                      }
+                    >
+                      <HugeiconsIcon
+                        icon={columnRunPending ? Loading03Icon : PlayIcon}
+                        strokeWidth={2}
+                        className={cn("size-3.5", columnRunPending && "animate-spin")}
+                      />
+                    </Button>
+                  ) : null}
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       render={
@@ -546,7 +634,14 @@ export function TableDataGrid({
               column.type === "sheriff" ? (
                 <SheriffCell
                   value={getValue()}
-                  pending={pendingRuns.has(sheriffRunKey(row.original.id, column.id))}
+                  pending={cellRunIsPending(
+                    row.original.id,
+                    column.id,
+                    column.type,
+                    getValue(),
+                    pendingRuns,
+                    pendingColumnRuns,
+                  )}
                   onRun={() =>
                     runSheriff.mutate({
                       rowIds: [row.original.id],
@@ -559,7 +654,14 @@ export function TableDataGrid({
               ) : column.type === "email_enrichment" ? (
                 <EmailEnrichmentCell
                   value={getValue()}
-                  pending={pendingRuns.has(sheriffRunKey(row.original.id, column.id))}
+                  pending={cellRunIsPending(
+                    row.original.id,
+                    column.id,
+                    column.type,
+                    getValue(),
+                    pendingRuns,
+                    pendingColumnRuns,
+                  )}
                   onRun={() =>
                     runSheriff.mutate({
                       rowIds: [row.original.id],
@@ -572,7 +674,14 @@ export function TableDataGrid({
               ) : column.type === "email_validation" ? (
                 <EmailValidationCell
                   value={getValue()}
-                  pending={pendingRuns.has(sheriffRunKey(row.original.id, column.id))}
+                  pending={cellRunIsPending(
+                    row.original.id,
+                    column.id,
+                    column.type,
+                    getValue(),
+                    pendingRuns,
+                    pendingColumnRuns,
+                  )}
                   onRun={() =>
                     runSheriff.mutate({
                       rowIds: [row.original.id],
@@ -622,7 +731,18 @@ export function TableDataGrid({
           ),
         }),
       ]),
-    [canHideColumn, canReorder, displayColumns, hideColumn, pendingRuns, runSheriff, saveCell, virtualIndexByRowId],
+    [
+      canHideColumn,
+      canReorder,
+      displayColumns,
+      hideColumn,
+      pendingColumnRuns,
+      pendingRuns,
+      runSheriff,
+      saveCell,
+      total,
+      virtualIndexByRowId,
+    ],
   );
 
   const table = useTable({
@@ -704,13 +824,18 @@ export function TableDataGrid({
     ? computedInFlightStatus(
         inspectedColumn?.type ?? "sheriff",
         inspectedRow?.values[inspected.columnId],
-        pendingRuns.has(sheriffRunKey(inspected.rowId, inspected.columnId)),
+        cellRunIsPending(
+          inspected.rowId,
+          inspected.columnId,
+          inspectedColumn?.type ?? "sheriff",
+          inspectedRow?.values[inspected.columnId],
+          pendingRuns,
+          pendingColumnRuns,
+        ),
       )
     : null;
   const inspectedRunError =
-    inspected &&
-    runSheriff.variables?.rowIds.includes(inspected.rowId) &&
-    runSheriff.variables?.columnId === inspected.columnId
+    inspected && mutationTargetsRow(runSheriff.variables, inspected.rowId, inspected.columnId)
       ? mutationErrorMessage(
           runSheriff.error,
           runSheriff.isError
@@ -724,8 +849,7 @@ export function TableDataGrid({
       : null;
   const inspectedRerunPending = inspected
     ? runSheriff.isPending &&
-      Boolean(runSheriff.variables?.rowIds.includes(inspected.rowId)) &&
-      runSheriff.variables?.columnId === inspected.columnId
+      mutationTargetsRow(runSheriff.variables, inspected.rowId, inspected.columnId)
     : false;
 
   if (displayColumns.length === 0) {
@@ -1045,7 +1169,11 @@ export function TableDataGrid({
             mutationErrorMessage(hideColumn.error, hideColumn.isError ? "Failed to hide column" : "") ||
             mutationErrorMessage(
               runSheriff.error,
-              runSheriff.isError ? "Failed to run selected cells" : "",
+              runSheriff.isError
+                ? runSheriff.variables?.rowIds
+                  ? "Failed to run selected cells"
+                  : "Failed to run remaining rows"
+                : "",
             ) ||
             mutationErrorMessage(createRow.error, createRow.isError ? "Failed to add row" : "")}
         </p>

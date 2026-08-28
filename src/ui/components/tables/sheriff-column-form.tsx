@@ -4,6 +4,8 @@ import {
   DEFAULT_SHERIFF_MODEL,
   DEFAULT_SHERIFF_WEB_SEARCH,
   SHERIFF_MODELS,
+  SHERIFF_WEB_SEARCH_LIMIT_MAX,
+  SHERIFF_WEB_SEARCH_LIMIT_MIN,
   expandSheriffPrompt,
   getSheriffOptions,
   isComputedColumnType,
@@ -74,6 +76,18 @@ function outputsFromConfig(config: SheriffConfig | null): DraftOutput[] {
   }));
 }
 
+function webSearchLimitFromConfig(config: SheriffConfig | null): string {
+  return typeof config?.web_search_limit === "number" ? String(config.web_search_limit) : "";
+}
+
+function optionalWebSearchLimit(raw: string, enabled: boolean): number | undefined {
+  const trimmed = raw.trim();
+  if (!enabled || trimmed === "") {
+    return undefined;
+  }
+  return Number(trimmed);
+}
+
 function promptFromConfig(config: SheriffConfig | null): { prompt: string; sourcePrompt: string | null } {
   if (!config) {
     return { prompt: "", sourcePrompt: null };
@@ -123,6 +137,7 @@ export function SheriffColumnForm({
   const [sourcePrompt, setSourcePrompt] = useState<string | null>(initialPrompt.sourcePrompt);
   const [outputs, setOutputs] = useState<DraftOutput[]>(() => outputsFromConfig(initialConfig));
   const [webSearch, setWebSearch] = useState(initialConfig?.web_search ?? DEFAULT_SHERIFF_WEB_SEARCH);
+  const [webSearchLimit, setWebSearchLimit] = useState(() => webSearchLimitFromConfig(initialConfig));
   const [model, setModel] = useState<SheriffModel>(initialConfig?.model ?? DEFAULT_SHERIFF_MODEL);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [mention, setMention] = useState<SlashMention | null>(null);
@@ -219,6 +234,7 @@ export function SheriffColumnForm({
         enhanced_prompt: sourcePrompt ? prompt : undefined,
         outputs: outputs.map((field) => ({ key: field.key, type: field.type })),
         web_search: webSearch,
+        web_search_limit: optionalWebSearchLimit(webSearchLimit, webSearch),
         model,
       },
     });
@@ -426,6 +442,28 @@ export function SheriffColumnForm({
           <FieldDescription>
             When on, Sheriff can look up sources on the web. Turn off to answer from the model only.
           </FieldDescription>
+          <Field>
+            <FieldLabel htmlFor={`${idPrefix}-web-search-limit`} className="text-xs text-muted-foreground">
+              Search limit
+            </FieldLabel>
+            <Input
+              id={`${idPrefix}-web-search-limit`}
+              type="number"
+              inputMode="numeric"
+              min={SHERIFF_WEB_SEARCH_LIMIT_MIN}
+              max={SHERIFF_WEB_SEARCH_LIMIT_MAX}
+              step={1}
+              value={webSearchLimit}
+              disabled={pending || !webSearch}
+              onChange={(event) => setWebSearchLimit(event.target.value)}
+              placeholder="Default"
+              className="h-9 rounded-lg px-3 text-sm"
+            />
+            <FieldDescription>
+              Caps web searches per row ({SHERIFF_WEB_SEARCH_LIMIT_MIN}–{SHERIFF_WEB_SEARCH_LIMIT_MAX}).
+              Leave empty to omit a limit.
+            </FieldDescription>
+          </Field>
         </div>
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
