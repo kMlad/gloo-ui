@@ -3,6 +3,7 @@ import {
   EMAIL_PROVIDER_LABELS,
   parseEmailEnrichmentCell,
   type CellValue,
+  type ComputedInFlightStatus,
   type EmailEnrichmentCellStatus,
   type EmailEnrichmentStep,
   type EmailEnrichmentStepEmail,
@@ -35,7 +36,7 @@ type EmailEnrichmentRunDrawerProps = {
   onOpenChange: (open: boolean) => void;
   columnName: string;
   value: CellValue | undefined;
-  inFlight?: "queued" | "running" | null;
+  inFlight?: ComputedInFlightStatus | null;
   rerunPending?: boolean;
   error?: string | null;
   onRerun: () => void;
@@ -53,8 +54,14 @@ export function EmailEnrichmentRunDrawer({
 }: EmailEnrichmentRunDrawerProps) {
   const cell = parseEmailEnrichmentCell(value);
   const phase = rerunPending ? "queued" : inFlight;
-  const busy = phase === "queued" || phase === "running";
+  const busy = phase === "queued" || phase === "running" || phase === "waiting";
+  const waiting = (phase ?? cell?.status) === "waiting";
   const steps = cell?.steps ?? [];
+  const displaySteps =
+    waiting && !steps.some((step) => step.provider === "fullenrich")
+      ? [...steps, { provider: "fullenrich", status: "waiting", emails: [] }]
+      : steps;
+  const progressOnly = !waiting && busy && steps.length === 0;
   const rejected = cell?.rejected_emails.filter((email) => email.trim()) ?? [];
   const rejectedInSteps = new Set(
     steps.flatMap((step) => step.emails.map((item) => item.email)),
@@ -77,7 +84,7 @@ export function EmailEnrichmentRunDrawer({
         </DrawerHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4">
-          {busy ? (
+          {progressOnly ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               {phase === "running" ? (
                 <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="size-4 animate-spin" />
@@ -89,7 +96,7 @@ export function EmailEnrichmentRunDrawer({
           ) : (
             <>
               <Section label="Status">
-                <StatusLine status={cell?.status} />
+                <StatusLine status={waiting ? "waiting" : cell?.status} />
               </Section>
 
               {cell?.email ? (
@@ -98,10 +105,10 @@ export function EmailEnrichmentRunDrawer({
                 </Section>
               ) : null}
 
-              {steps.length > 0 ? (
+              {displaySteps.length > 0 ? (
                 <Section label="Providers">
                   <ol className="flex flex-col gap-2">
-                    {steps.map((step, index) => (
+                    {displaySteps.map((step, index) => (
                       <ProviderStep
                         key={`${step.provider}-${index}`}
                         step={step}
@@ -149,20 +156,25 @@ export function EmailEnrichmentRunDrawer({
         </div>
 
         <DrawerFooter className="flex-row justify-end">
-          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={phase === "queued" || phase === "running"}
+            onClick={() => onOpenChange(false)}
+          >
             Close
           </Button>
           <Button type="button" disabled={busy} onClick={onRerun}>
             {busy ? (
-              phase === "running" ? (
-                <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="animate-spin" />
-              ) : (
+              phase === "queued" ? (
                 <HugeiconsIcon icon={Clock01Icon} strokeWidth={2} />
+              ) : (
+                <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="animate-spin" />
               )
             ) : (
               <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
             )}
-            {busy ? (phase === "running" ? "Running..." : "Queued") : "Rerun"}
+            {busy ? busyLabel(phase) : "Rerun"}
           </Button>
         </DrawerFooter>
       </DrawerContent>
@@ -239,6 +251,14 @@ function StatusLine({ status }: { status: EmailEnrichmentCellStatus | undefined 
       </p>
     );
   }
+  if (status === "waiting") {
+    return (
+      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="size-3.5 animate-spin" />
+        Waiting for FullEnrich...
+      </p>
+    );
+  }
   if (status === "succeeded") {
     return (
       <p className="flex items-center gap-1.5 text-sm text-foreground">
@@ -274,6 +294,16 @@ function StatusLine({ status }: { status: EmailEnrichmentCellStatus | undefined 
   return <p className="text-sm text-muted-foreground">No run yet</p>;
 }
 
+function busyLabel(phase: ComputedInFlightStatus | null) {
+  if (phase === "running") {
+    return "Running...";
+  }
+  if (phase === "waiting") {
+    return "Waiting...";
+  }
+  return "Queued";
+}
+
 function providerLabel(provider: string) {
   if (provider in EMAIL_PROVIDER_LABELS) {
     return EMAIL_PROVIDER_LABELS[provider as EmailProvider];
@@ -287,6 +317,9 @@ function stepStatusLabel(status: string) {
   }
   if (status === "not_found") {
     return "Not found";
+  }
+  if (status === "waiting") {
+    return "Waiting";
   }
   if (status === "skipped_not_configured") {
     return "Not configured";

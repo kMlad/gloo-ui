@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   parseSheriffCell,
   type CellValue,
+  type ComputedInFlightStatus,
   type SheriffCellStatus,
   type ColumnResponse,
 } from "@/lib/tables";
@@ -33,7 +34,7 @@ type SheriffRunDrawerProps = {
   value: CellValue | undefined;
   columns: ColumnResponse[];
   columnId: string;
-  inFlight?: "queued" | "running" | null;
+  inFlight?: ComputedInFlightStatus | null;
   rerunPending?: boolean;
   error?: string | null;
   onRerun: () => void;

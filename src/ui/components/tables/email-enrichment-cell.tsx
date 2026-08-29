@@ -52,6 +52,27 @@ export function EmailEnrichmentCell({
     );
   }
 
+  if (status === "waiting") {
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        aria-busy="true"
+        title="Waiting for FullEnrich"
+        className={cn(cellClass, "text-left text-muted-foreground hover:bg-muted/70 disabled:opacity-50")}
+        onClick={(event) => {
+          if (event.shiftKey) {
+            return;
+          }
+          onOpen();
+        }}
+      >
+        <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="size-3.5 shrink-0 animate-spin" />
+        <span className="truncate">Waiting...</span>
+      </button>
+    );
+  }
+
   if (cell?.status === "succeeded") {
     return (
       <button

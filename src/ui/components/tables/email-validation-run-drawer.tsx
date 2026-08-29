@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   parseEmailValidationCell,
   type CellValue,
+  type ComputedInFlightStatus,
   type EmailValidationCellStatus,
 } from "@/lib/tables";
 import { Button } from "@/ui/components/ui/button";
@@ -30,7 +31,7 @@ type EmailValidationRunDrawerProps = {
   onOpenChange: (open: boolean) => void;
   columnName: string;
   value: CellValue | undefined;
-  inFlight?: "queued" | "running" | null;
+  inFlight?: ComputedInFlightStatus | null;
   rerunPending?: boolean;
   error?: string | null;
   onRerun: () => void;

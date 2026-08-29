@@ -241,6 +241,7 @@ export type SheriffCell = z.infer<typeof sheriffCellSchema>;
 export const emailEnrichmentCellStatusSchema = z.enum([
   "queued",
   "running",
+  "waiting",
   "succeeded",
   "failed",
   "skipped",
@@ -297,8 +298,19 @@ export type SheriffRunCreate = {
   overwrite?: boolean;
 };
 
-export type SheriffRunStatus = "queued" | "running" | "succeeded" | "partial" | "failed";
-export type SheriffRunItemStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
+export type SheriffRunStatus = "queued" | "running" | "waiting" | "succeeded" | "partial" | "failed";
+export type SheriffRunItemStatus =
+  | "queued"
+  | "running"
+  | "waiting"
+  | "succeeded"
+  | "not_found"
+  | "failed"
+  | "skipped";
+export type ComputedInFlightStatus = "queued" | "running" | "waiting";
+
+export const EMAIL_ENRICHMENT_ALREADY_ACTIVE_MESSAGE =
+  "An email enrichment is already active for this row";
 
 export type SheriffRunItemResponse = {
   id: string;
@@ -838,7 +850,7 @@ export function sheriffCellIsFailed(value: CellValue | undefined): boolean {
 
 export function emailEnrichmentCellIsActive(value: CellValue | undefined): boolean {
   const status = parseEmailEnrichmentCell(value)?.status;
-  return status === "queued" || status === "running";
+  return status === "queued" || status === "running" || status === "waiting";
 }
 
 export function emailValidationCellIsActive(value: CellValue | undefined): boolean {
@@ -849,11 +861,11 @@ export function emailValidationCellIsActive(value: CellValue | undefined): boole
 function inFlightStatusFrom(
   status: string | undefined,
   pending = false,
-): "queued" | "running" | null {
+): ComputedInFlightStatus | null {
   if (pending) {
     return "queued";
   }
-  if (status === "queued" || status === "running") {
+  if (status === "queued" || status === "running" || status === "waiting") {
     return status;
   }
   return null;
@@ -862,21 +874,21 @@ function inFlightStatusFrom(
 export function sheriffInFlightStatus(
   value: CellValue | undefined,
   pending = false,
-): "queued" | "running" | null {
+): ComputedInFlightStatus | null {
   return inFlightStatusFrom(parseSheriffCell(value)?.status, pending);
 }
 
 export function emailEnrichmentInFlightStatus(
   value: CellValue | undefined,
   pending = false,
-): "queued" | "running" | null {
+): ComputedInFlightStatus | null {
   return inFlightStatusFrom(parseEmailEnrichmentCell(value)?.status, pending);
 }
 
 export function emailValidationInFlightStatus(
   value: CellValue | undefined,
   pending = false,
-): "queued" | "running" | null {
+): ComputedInFlightStatus | null {
   return inFlightStatusFrom(parseEmailValidationCell(value)?.status, pending);
 }
 
@@ -884,7 +896,7 @@ export function computedInFlightStatus(
   type: string,
   value: CellValue | undefined,
   pending = false,
-): "queued" | "running" | null {
+): ComputedInFlightStatus | null {
   if (type === "email_enrichment") {
     return emailEnrichmentInFlightStatus(value, pending);
   }
@@ -892,6 +904,20 @@ export function computedInFlightStatus(
     return emailValidationInFlightStatus(value, pending);
   }
   return sheriffInFlightStatus(value, pending);
+}
+
+export function emailEnrichmentRunSkipNotice(run: SheriffRunResponse): string | null {
+  const skipped = (run.items ?? []).filter(
+    (item) =>
+      item.status === "skipped" && item.error_message === EMAIL_ENRICHMENT_ALREADY_ACTIVE_MESSAGE,
+  );
+  if (skipped.length === 0) {
+    return null;
+  }
+  if (skipped.length === 1) {
+    return EMAIL_ENRICHMENT_ALREADY_ACTIVE_MESSAGE;
+  }
+  return `${skipped.length} rows skipped: ${EMAIL_ENRICHMENT_ALREADY_ACTIVE_MESSAGE}`;
 }
 
 export function computedCellIsSucceeded(type: string, value: CellValue | undefined): boolean {

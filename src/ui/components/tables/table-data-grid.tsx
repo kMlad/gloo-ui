@@ -8,6 +8,9 @@ import {
   computedInFlightStatus,
   deleteColumn,
   deleteRow,
+  EMAIL_ENRICHMENT_ALREADY_ACTIVE_MESSAGE,
+  emailEnrichmentCellIsActive,
+  emailEnrichmentRunSkipNotice,
   isComputedColumnType,
   mutationErrorMessage,
   reorderColumns,
@@ -209,6 +212,7 @@ export function TableDataGrid({
   const [pendingColumnRuns, setPendingColumnRuns] = useState<Set<string>>(() => new Set());
   const [inspected, setInspected] = useState<{ rowId: string; columnId: string } | null>(null);
   const [sheriffSelection, setSheriffSelection] = useState<SheriffSelection | null>(null);
+  const [runSkipNotice, setRunSkipNotice] = useState<string | null>(null);
   const draggingIdRef = useRef<string | null>(null);
   const sheriffAnchorRef = useRef<SheriffAnchor | null>(null);
   const sheriffSelectionRef = useRef<SheriffSelection | null>(null);
@@ -278,6 +282,7 @@ export function TableDataGrid({
         overwrite,
       }),
     onMutate: ({ rowIds, columnId }) => {
+      setRunSkipNotice(null);
       if (!rowIds) {
         setPendingColumnRuns((current) => {
           const next = new Set(current);
@@ -294,7 +299,8 @@ export function TableDataGrid({
         return next;
       });
     },
-    onSuccess: async (_run, { rowIds, columnId }) => {
+    onSuccess: async (run, { rowIds, columnId }) => {
+      setRunSkipNotice(emailEnrichmentRunSkipNotice(run));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: tableKeys.detail(tableId) }),
         queryClient.invalidateQueries({ queryKey: tableKeys.rowList(tableId) }),
@@ -316,6 +322,7 @@ export function TableDataGrid({
       });
     },
     onError: (_error, { rowIds, columnId }) => {
+      setRunSkipNotice(null);
       if (!rowIds) {
         setPendingColumnRuns((current) => {
           const next = new Set(current);
@@ -469,8 +476,34 @@ export function TableDataGrid({
     return [rowId];
   }
 
+  function startComputedRun(input: {
+    rowIds?: string[];
+    columnId: string;
+    overwrite: boolean;
+  }) {
+    const column = schemaColumns.find((item) => item.id === input.columnId);
+    const rowIds = input.rowIds;
+    if (
+      column?.type === "email_enrichment" &&
+      rowIds &&
+      rowIds.length > 0 &&
+      rowIds.every((rowId) => emailEnrichmentCellIsActive(rowById.get(rowId)?.values[input.columnId]))
+    ) {
+      setRunSkipNotice(
+        rowIds.length === 1
+          ? EMAIL_ENRICHMENT_ALREADY_ACTIVE_MESSAGE
+          : `${rowIds.length} rows skipped: ${EMAIL_ENRICHMENT_ALREADY_ACTIVE_MESSAGE}`,
+      );
+      if (!runSheriff.isPending) {
+        runSheriff.reset();
+      }
+      return;
+    }
+    runSheriff.mutate(input);
+  }
+
   function runSelectedSheriffCells(rowId: string, columnId: string) {
-    runSheriff.mutate({
+    startComputedRun({
       rowIds: contextSheriffRowIds(rowId, columnId),
       columnId,
       overwrite: false,
@@ -488,7 +521,7 @@ export function TableDataGrid({
     if (rowIds.length === 0) {
       return;
     }
-    runSheriff.mutate({ rowIds, columnId, overwrite: true });
+    startComputedRun({ rowIds, columnId, overwrite: true });
     clearSheriffSelection();
   }
 
@@ -560,7 +593,7 @@ export function TableDataGrid({
                       disabled={total === 0 || columnRunPending}
                       onPointerDown={(event) => event.stopPropagation()}
                       onClick={() =>
-                        runSheriff.mutate({
+                        startComputedRun({
                           columnId: column.id,
                           overwrite: false,
                         })
@@ -643,7 +676,7 @@ export function TableDataGrid({
                     pendingColumnRuns,
                   )}
                   onRun={() =>
-                    runSheriff.mutate({
+                    startComputedRun({
                       rowIds: [row.original.id],
                       columnId: column.id,
                       overwrite: false,
@@ -663,7 +696,7 @@ export function TableDataGrid({
                     pendingColumnRuns,
                   )}
                   onRun={() =>
-                    runSheriff.mutate({
+                    startComputedRun({
                       rowIds: [row.original.id],
                       columnId: column.id,
                       overwrite: false,
@@ -683,7 +716,7 @@ export function TableDataGrid({
                     pendingColumnRuns,
                   )}
                   onRun={() =>
-                    runSheriff.mutate({
+                    startComputedRun({
                       rowIds: [row.original.id],
                       columnId: column.id,
                       overwrite: false,
@@ -738,7 +771,7 @@ export function TableDataGrid({
       hideColumn,
       pendingColumnRuns,
       pendingRuns,
-      runSheriff,
+      startComputedRun,
       saveCell,
       total,
       virtualIndexByRowId,
@@ -873,7 +906,7 @@ export function TableDataGrid({
               size="sm"
               disabled={runSheriff.isPending}
               onClick={() =>
-                runSheriff.mutate({
+                startComputedRun({
                   rowIds,
                   columnId: column.id,
                   overwrite: true,
@@ -1033,6 +1066,16 @@ export function TableDataGrid({
                             sheriffSelection?.columnId === schemaColumn.id &&
                             sheriffSelection.rowIds.includes(row.original.id);
                           const selectedCount = selected ? sheriffSelection.rowIds.length : 1;
+                          const selectedRowIds = selected
+                            ? sheriffSelection.rowIds
+                            : [row.original.id];
+                          const enrichmentAlreadyActive =
+                            schemaColumn.type === "email_enrichment" &&
+                            selectedRowIds.every((rowId) =>
+                              emailEnrichmentCellIsActive(
+                                rowById.get(rowId)?.values[schemaColumn.id],
+                              ),
+                            );
                           const failedCount =
                             schemaColumn.type === "sheriff"
                               ? failedSheriffRowIds(
@@ -1079,14 +1122,15 @@ export function TableDataGrid({
                                 </ContextMenuTrigger>
                                 <ContextMenuContent>
                                   <ContextMenuItem
-                                    disabled={runSheriff.isPending}
+                                    disabled={runSheriff.isPending || enrichmentAlreadyActive}
                                     onClick={() =>
                                       runSelectedSheriffCells(row.original.id, schemaColumn.id)
                                     }
                                   >
                                     <HugeiconsIcon icon={PlayIcon} strokeWidth={2} />
-                                    Run {selectedCount} selected{" "}
-                                    {selectedCount === 1 ? "cell" : "cells"}
+                                    {enrichmentAlreadyActive
+                                      ? EMAIL_ENRICHMENT_ALREADY_ACTIVE_MESSAGE
+                                      : `Run ${selectedCount} selected ${selectedCount === 1 ? "cell" : "cells"}`}
                                   </ContextMenuItem>
                                   {failedCount > 0 ? (
                                     <ContextMenuItem
@@ -1160,12 +1204,13 @@ export function TableDataGrid({
         </Table>
       </div>
 
-      {moveColumns.error || hideColumn.error || runSheriff.error || createRow.error ? (
+      {moveColumns.error || hideColumn.error || runSheriff.error || createRow.error || runSkipNotice ? (
         <p className="shrink-0 text-sm text-destructive">
-          {mutationErrorMessage(
-            moveColumns.error,
-            moveColumns.isError ? "Failed to reorder columns" : "",
-          ) ||
+          {runSkipNotice ||
+            mutationErrorMessage(
+              moveColumns.error,
+              moveColumns.isError ? "Failed to reorder columns" : "",
+            ) ||
             mutationErrorMessage(hideColumn.error, hideColumn.isError ? "Failed to hide column" : "") ||
             mutationErrorMessage(
               runSheriff.error,
@@ -1223,7 +1268,7 @@ export function TableDataGrid({
           if (!inspected) {
             return;
           }
-          runSheriff.mutate({
+          startComputedRun({
             rowIds: [inspected.rowId],
             columnId: inspected.columnId,
             overwrite: true,
@@ -1250,7 +1295,7 @@ export function TableDataGrid({
           if (!inspected) {
             return;
           }
-          runSheriff.mutate({
+          startComputedRun({
             rowIds: [inspected.rowId],
             columnId: inspected.columnId,
             overwrite: true,
@@ -1277,7 +1322,7 @@ export function TableDataGrid({
           if (!inspected) {
             return;
           }
-          runSheriff.mutate({
+          startComputedRun({
             rowIds: [inspected.rowId],
             columnId: inspected.columnId,
             overwrite: true,
