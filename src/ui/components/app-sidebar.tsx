@@ -21,6 +21,7 @@ import {
   DashboardSquare01Icon,
   GridTableIcon,
   UserAdd01Icon,
+  UserGroupIcon,
 } from "@hugeicons/core-free-icons"
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
@@ -35,6 +36,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const navItems = [
     { title: "Dashboard", url: "/dashboard", icon: DashboardSquare01Icon },
     { title: "Tables", url: "/tables", icon: GridTableIcon },
+    { title: "Leads", url: "/leads", icon: UserGroupIcon },
     ...(canInvite(role) ? [{ title: "Invite user", url: "/invite-user", icon: UserAdd01Icon }] : []),
   ]
 

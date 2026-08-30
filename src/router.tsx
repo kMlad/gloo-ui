@@ -11,6 +11,7 @@ import { UpdatePasswordPage } from "./ui/pages/update-password-page";
 import { InviteUserPage } from "./ui/pages/invite-user-page";
 import { TablesPage } from "./ui/pages/tables-page";
 import { TableDetailPage } from "./ui/pages/table-detail-page";
+import { LeadsPage } from "./ui/pages/leads-page";
 
 export const router = createBrowserRouter([
   {
@@ -58,6 +59,10 @@ export const router = createBrowserRouter([
               {
                 path: "/tables/:tableId",
                 Component: TableDetailPage,
+              },
+              {
+                path: "/leads",
+                Component: LeadsPage,
               },
               {
                 Component: InviteLayout,
