@@ -1,24 +1,24 @@
 import { type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  formatMessageTime,
   formatPropertyValue,
   getLead,
   hrefFromUrl,
   leadDisplayName,
   leadKeys,
   leadPhone,
-  phoneSourceLabel,
+  messageDirection,
   propertyEntries,
   replyTypeLabel,
+  type LeadConversation,
   type LeadListItem,
+  type LeadReply,
 } from "@/lib/leads";
-import { formatTableDate, mutationErrorMessage } from "@/lib/tables";
+import { omitLeadingSubject, parseMessageBody, type MessageBlock, type MessageInline } from "@/lib/message-body";
+import { mutationErrorMessage } from "@/lib/tables";
+import { cn } from "@/lib/utils";
 import { Button } from "@/ui/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/ui/components/ui/collapsible";
 import {
   Drawer,
   DrawerClose,
@@ -29,13 +29,22 @@ import {
 } from "@/ui/components/ui/drawer";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowDown01Icon, Cancel01Icon, LinkSquare02Icon } from "@hugeicons/core-free-icons";
+import {
+  Call02Icon,
+  Cancel01Icon,
+  LinkSquare02Icon,
+  Mail01Icon,
+} from "@hugeicons/core-free-icons";
 
 type LeadDetailDrawerProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   leadId: string | null;
   summary?: LeadListItem | null;
+};
+
+type ThreadMessage = LeadReply & {
+  conversation: LeadConversation;
 };
 
 export function LeadDetailDrawer({
@@ -54,7 +63,11 @@ export function LeadDetailDrawer({
   const conversations = detailQuery.data?.conversations ?? [];
   const headerLead = lead ?? (summary?.id === leadId ? summary : null);
   const title = headerLead ? leadDisplayName(headerLead) : "Lead";
-  const email = headerLead?.email ?? "";
+  const linkedinHref = hrefFromUrl(headerLead?.linkedin_profile);
+  const websiteHref = hrefFromUrl(headerLead?.website) ?? hrefFromUrl(headerLead?.company_url);
+  const companyName = headerLead?.company_name?.trim() || "";
+  const location = headerLead?.location?.trim() || "";
+  const phone = headerLead ? leadPhone(headerLead) : null;
   const error = mutationErrorMessage(
     detailQuery.error,
     detailQuery.isError ? "Failed to load lead" : "",
@@ -64,9 +77,55 @@ export function LeadDetailDrawer({
     <Drawer open={open} onOpenChange={onOpenChange} swipeDirection="right">
       <DrawerContent className="sm:[--drawer-content-width:32rem]">
         <DrawerHeader className="relative pr-12">
-          <DrawerTitle className="truncate">{title}</DrawerTitle>
-          <DrawerDescription className="truncate">
-            {email || "Imported SmartLead contact and reply history."}
+          <DrawerTitle className="min-w-0">
+            {linkedinHref ? (
+              <a
+                href={linkedinHref}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open ${title} on LinkedIn`}
+                className="inline-flex max-w-full items-center gap-1.5 underline-offset-4 hover:underline"
+              >
+                <span className="truncate">{title}</span>
+                <HugeiconsIcon
+                  icon={LinkSquare02Icon}
+                  strokeWidth={2}
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                />
+              </a>
+            ) : (
+              <span className="block truncate">{title}</span>
+            )}
+          </DrawerTitle>
+          <DrawerDescription className="min-w-0 text-left text-pretty">
+            {companyName || location ? (
+              <span className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-x-1.5">
+                {companyName ? (
+                  websiteHref ? (
+                    <a
+                      href={websiteHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Open ${companyName} website`}
+                      className="inline-flex max-w-full items-center gap-1 text-muted-foreground underline-offset-4 hover:underline"
+                    >
+                      <span className="truncate">{companyName}</span>
+                      <HugeiconsIcon
+                        icon={LinkSquare02Icon}
+                        strokeWidth={2}
+                        className="size-3.5 shrink-0"
+                      />
+                    </a>
+                  ) : (
+                    <span className="truncate">{companyName}</span>
+                  )
+                ) : null}
+                {companyName && location ? <span aria-hidden="true">·</span> : null}
+                {location ? <span className="truncate">{location}</span> : null}
+              </span>
+            ) : (
+              <span className="sr-only">Lead details</span>
+            )}
           </DrawerDescription>
           <DrawerClose
             render={<Button variant="ghost" className="absolute top-3 right-3" size="icon-sm" />}
@@ -76,139 +135,238 @@ export function LeadDetailDrawer({
           </DrawerClose>
         </DrawerHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1 flex-col">
           {detailQuery.isPending ? (
-            <div className="flex flex-col gap-3">
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-full" />
+            <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+              <Skeleton className="h-4 w-1/2" />
               <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="mt-4 h-4 w-1/4" />
-              <Skeleton className="h-16 w-full" />
+              <Skeleton className="mt-2 h-4 w-1/4" />
+              <Skeleton className="min-h-0 flex-1 w-full" />
             </div>
           ) : error ? (
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="p-4 text-sm text-destructive">{error}</p>
           ) : lead ? (
             <>
-              <Section label="Contact">
+              <div className="flex shrink-0 flex-col gap-4 px-4 pt-4 pb-3">
                 <dl className="flex flex-col gap-2">
-                  <Field label="Email" value={lead.email} />
-                  <Field label="Company" value={lead.company_name} />
-                  <Field label="Location" value={lead.location} />
-                  <LinkField label="LinkedIn" href={hrefFromUrl(lead.linkedin_profile)} />
-                  <LinkField label="Website" href={hrefFromUrl(lead.website)} />
-                  <LinkField label="Company URL" href={hrefFromUrl(lead.company_url)} />
+                  <IconField icon={Mail01Icon} label="Email" value={lead.email} />
+                  <IconField icon={Call02Icon} label="Phone" value={phone} />
                 </dl>
-              </Section>
+                <PropertySection label="Custom properties" record={lead.custom_properties} />
+              </div>
 
-              <Section label="Phone">
-                {leadPhone(lead) ? (
-                  <dl className="flex flex-col gap-2">
-                    <Field
-                      label="Enriched"
-                      value={
-                        lead.enriched_phone_number
-                          ? `${lead.enriched_phone_number}${
-                              phoneSourceLabel(lead.phone_source)
-                                ? ` · ${phoneSourceLabel(lead.phone_source)}`
-                                : ""
-                            }`
-                          : null
-                      }
-                    />
-                    <Field label="SmartLead" value={lead.smartlead_phone_number} />
-                  </dl>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No phone number yet.</p>
-                )}
-              </Section>
-
-              <PropertySection label="Properties" record={lead.properties} />
-              <PropertySection label="Custom properties" record={lead.custom_properties} />
-
-              <Section label="Conversations">
-                {conversations.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No conversations yet.</p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {conversations.map((conversation, index) => {
-                      const replies = conversation.replies ?? [];
-                      const replyLabel = replyTypeLabel(conversation.reply_type) ?? "Uncategorized";
-                      return (
-                        <Collapsible
-                          key={conversation.id}
-                          defaultOpen={index === 0}
-                          className="group rounded-lg border border-border/70 bg-background/60"
-                        >
-                          <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left">
-                            <div className="min-w-0 flex flex-col gap-0.5">
-                              <p className="text-sm font-medium text-foreground">{replyLabel}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Campaign {conversation.smartlead_campaign_id ?? "—"}
-                                {conversation.qualified_at
-                                  ? ` · ${formatTableDate(conversation.qualified_at)}`
-                                  : ""}
-                                {` · ${replies.length} ${replies.length === 1 ? "reply" : "replies"}`}
-                              </p>
-                            </div>
-                            <HugeiconsIcon
-                              icon={ArrowDown01Icon}
-                              strokeWidth={2}
-                              className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform group-data-open:rotate-180"
-                            />
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="border-t border-border/70 px-3 py-3">
-                            {conversation.positive_category_name ? (
-                              <p className="mb-3 text-xs text-muted-foreground">
-                                Category: {conversation.positive_category_name}
-                              </p>
-                            ) : null}
-                            {replies.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">No replies stored.</p>
-                            ) : (
-                              <ol className="flex flex-col gap-3">
-                                {replies.map((reply) => (
-                                  <li
-                                    key={reply.id}
-                                    className="flex flex-col gap-1.5 rounded-md bg-muted/40 px-2.5 py-2"
-                                  >
-                                    {reply.subject ? (
-                                      <p className="text-sm font-medium text-foreground">
-                                        {reply.subject}
-                                      </p>
-                                    ) : null}
-                                    <p className="text-xs text-muted-foreground">
-                                      {[reply.sent_from, reply.sent_to].filter(Boolean).length > 0
-                                        ? `${reply.sent_from ?? "Unknown"} → ${reply.sent_to ?? "Unknown"}`
-                                        : "Sender unknown"}
-                                      {reply.received_at
-                                        ? ` · ${formatTableDate(reply.received_at)}`
-                                        : ""}
-                                    </p>
-                                    {reply.body ? (
-                                      <p className="whitespace-pre-wrap text-sm text-foreground/90">
-                                        {reply.body}
-                                      </p>
-                                    ) : (
-                                      <p className="text-sm text-muted-foreground">Empty body.</p>
-                                    )}
-                                  </li>
-                                ))}
-                              </ol>
-                            )}
-                          </CollapsibleContent>
-                        </Collapsible>
-                      );
-                    })}
-                  </div>
-                )}
-              </Section>
+              <ConversationThread conversations={conversations} />
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">Select a lead to inspect.</p>
+            <p className="p-4 text-sm text-muted-foreground">Select a lead to inspect.</p>
           )}
         </div>
       </DrawerContent>
     </Drawer>
+  );
+}
+
+function ConversationThread({ conversations }: { conversations: LeadConversation[] }) {
+  const grouped = conversations.map((conversation) => ({
+    conversation,
+    messages: [...(conversation.replies ?? [])].sort(compareReceivedAt),
+  }));
+  const hasMessages = grouped.some((group) => group.messages.length > 0);
+
+  return (
+    <section className="flex min-h-0 flex-1 flex-col border-t border-border/70">
+      <h3 className="shrink-0 px-4 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        Thread
+      </h3>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+        {!hasMessages ? (
+          <p className="text-sm text-muted-foreground">No messages yet.</p>
+        ) : (
+          <div className="flex flex-col gap-6">
+            {grouped.map(({ conversation, messages }) => {
+              if (messages.length === 0) {
+                return null;
+              }
+              const replyLabel = replyTypeLabel(conversation.reply_type);
+              return (
+                <div key={conversation.id} className="flex flex-col gap-3">
+                  {conversations.length > 1 ? (
+                    <p className="sticky top-0 z-10 bg-popover/95 py-1 text-[0.65rem] tracking-wide text-muted-foreground uppercase backdrop-blur-sm">
+                      {replyLabel ?? "Conversation"}
+                      {conversation.smartlead_campaign_id != null
+                        ? ` · Campaign ${conversation.smartlead_campaign_id}`
+                        : ""}
+                    </p>
+                  ) : null}
+                  <ol className="flex flex-col gap-2.5">
+                    {messages.map((message, index) => {
+                      const subject = message.subject?.trim() || "";
+                      return (
+                        <ThreadMessageItem
+                          key={message.id}
+                          message={{ ...message, conversation }}
+                          showSubject={index === 0 && Boolean(subject)}
+                        />
+                      );
+                    })}
+                  </ol>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ThreadMessageItem({
+  message,
+  showSubject,
+}: {
+  message: ThreadMessage;
+  showSubject: boolean;
+}) {
+  const outbound = messageDirection(message) === "outbound";
+  const subject = message.subject?.trim() || "";
+  const blocks = omitLeadingSubject(parseMessageBody(message.body), showSubject ? subject : null);
+  const time = formatMessageTime(message.received_at);
+  const sender = message.sent_from?.trim();
+
+  return (
+    <li
+      className={cn(
+        "flex min-w-0 flex-col gap-1 rounded-lg px-3 py-2.5",
+        outbound
+          ? "ml-6 bg-muted/40"
+          : "mr-6 border border-border/70 bg-background",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">
+          {outbound ? "Sent" : "Received"}
+        </p>
+        {time ? (
+          <time className="shrink-0 text-[0.65rem] text-muted-foreground" dateTime={message.received_at ?? undefined}>
+            {time}
+          </time>
+        ) : null}
+      </div>
+      {sender ? (
+        <p className="truncate text-[0.65rem] text-muted-foreground">{sender}</p>
+      ) : null}
+      {showSubject ? (
+        <div className="mt-1 border-b border-border/70 pb-2.5" aria-label={`Subject: ${subject}`}>
+          <p className="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">
+            Subject
+          </p>
+          <p className="mt-0.5 min-w-0 text-sm font-medium leading-snug text-foreground">
+            {subject}
+          </p>
+        </div>
+      ) : null}
+      {blocks.length > 0 ? (
+        <MessageBody blocks={blocks} />
+      ) : (
+        <p className="text-sm text-muted-foreground">Empty message.</p>
+      )}
+    </li>
+  );
+}
+
+function MessageBody({ blocks }: { blocks: MessageBlock[] }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-2 text-sm text-foreground/90">
+      {blocks.map((block, index) =>
+        block.type === "list" ? (
+          <ListBlock
+            key={index}
+            ordered={block.ordered}
+            items={block.items}
+          />
+        ) : (
+          <p key={index} className="min-w-0 whitespace-pre-wrap">
+            <InlineSpans spans={block.spans} />
+          </p>
+        ),
+      )}
+    </div>
+  );
+}
+
+function ListBlock({
+  ordered,
+  items,
+}: {
+  ordered: boolean;
+  items: MessageInline[][];
+}) {
+  const ListTag = ordered ? "ol" : "ul";
+  return (
+    <ListTag
+      className={cn(
+        "min-w-0 space-y-1 pl-4 marker:text-muted-foreground",
+        ordered ? "list-decimal" : "list-disc",
+      )}
+    >
+      {items.map((spans, index) => (
+        <li key={index} className="min-w-0 whitespace-pre-wrap">
+          <InlineSpans spans={spans} />
+        </li>
+      ))}
+    </ListTag>
+  );
+}
+
+function InlineSpans({ spans }: { spans: MessageInline[] }) {
+  return spans.map((span, index) => {
+    if (span.type === "text") {
+      return <span key={index}>{span.value}</span>;
+    }
+    const longLabel = span.label.length > 24 || /https?:\/\//i.test(span.label);
+    return (
+      <a
+        key={index}
+        href={span.href}
+        target="_blank"
+        rel="noreferrer"
+        className={cn(
+          "text-foreground underline underline-offset-4 hover:opacity-80",
+          longLabel && "inline-block max-w-full break-all align-top",
+        )}
+      >
+        {span.label}
+      </a>
+    );
+  });
+}
+
+function compareReceivedAt(a: LeadReply, b: LeadReply) {
+  const aTime = a.received_at ? Date.parse(a.received_at) : 0;
+  const bTime = b.received_at ? Date.parse(b.received_at) : 0;
+  return (Number.isNaN(aTime) ? 0 : aTime) - (Number.isNaN(bTime) ? 0 : bTime);
+}
+
+function IconField({
+  icon,
+  label,
+  value,
+}: {
+  icon: typeof Mail01Icon;
+  label: string;
+  value: string | null | undefined;
+}) {
+  if (!value?.trim()) {
+    return null;
+  }
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <dt className="shrink-0 text-muted-foreground">
+        <HugeiconsIcon icon={icon} strokeWidth={2} className="size-3.5" />
+        <span className="sr-only">{label}</span>
+      </dt>
+      <dd className="min-w-0 truncate text-sm text-foreground">{value}</dd>
+    </div>
   );
 }
 
@@ -220,44 +378,6 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
       </h3>
       {children}
     </section>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string | null | undefined }) {
-  if (!value?.trim()) {
-    return null;
-  }
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate text-sm text-foreground">{value}</dd>
-    </div>
-  );
-}
-
-function LinkField({ label, href }: { label: string; href: string | null }) {
-  if (!href) {
-    return null;
-  }
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0">
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex max-w-full items-center gap-1 text-sm text-foreground underline-offset-4 hover:underline"
-        >
-          <HugeiconsIcon
-            icon={LinkSquare02Icon}
-            strokeWidth={2}
-            className="size-3.5 shrink-0 text-muted-foreground"
-          />
-          <span className="truncate">{href.replace(/^https?:\/\//i, "")}</span>
-        </a>
-      </dd>
-    </div>
   );
 }
 

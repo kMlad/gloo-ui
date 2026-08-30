@@ -55,14 +55,20 @@ export const leadListResponseSchema = z.object({
 });
 export type LeadListResponse = z.infer<typeof leadListResponseSchema>;
 
+export const MESSAGE_DIRECTIONS = ["inbound", "outbound"] as const;
+export const messageDirectionSchema = z.enum(MESSAGE_DIRECTIONS);
+export type MessageDirection = z.infer<typeof messageDirectionSchema>;
+
 export const leadReplySchema = z.object({
   id: z.string(),
   conversation_id: z.string().optional(),
+  smartlead_message_id: z.string().nullable().optional(),
   subject: z.string().nullable().optional(),
   body: z.string().optional(),
   sent_from: z.string().nullable().optional(),
   sent_to: z.string().nullable().optional(),
   received_at: z.string().nullable().optional(),
+  direction: messageDirectionSchema.optional(),
   message_properties: jsonRecordSchema.optional(),
 });
 export type LeadReply = z.infer<typeof leadReplySchema>;
@@ -96,6 +102,7 @@ export const leadDetailLeadSchema = z.object({
   phone_source: phoneSourceSchema.nullable().optional(),
   properties: jsonRecordSchema.optional(),
   custom_properties: jsonRecordSchema.optional(),
+  chat_refreshed_at: z.string().nullable().optional(),
   source_observed_at: z.string().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
@@ -186,6 +193,28 @@ export function replyTypeLabel(replyType: string | null | undefined) {
     return REPLY_TYPE_LABELS[replyType as ReplyType];
   }
   return replyType ?? null;
+}
+
+export function messageDirection(reply: {
+  direction?: string | null;
+}): MessageDirection {
+  return reply.direction === "outbound" ? "outbound" : "inbound";
+}
+
+export function formatMessageTime(iso: string | null | undefined) {
+  if (!iso) {
+    return null;
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 export function hrefFromUrl(value: string | null | undefined) {
