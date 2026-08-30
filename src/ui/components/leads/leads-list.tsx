@@ -6,6 +6,7 @@ import {
   leadPhone,
   type LeadListItem,
 } from "@/lib/leads";
+import { LeadStatusBadge } from "@/ui/components/leads/lead-status-badge";
 import { tableListFeatures, type TableListFeatures } from "@/ui/components/tables/data-table-features";
 import { Button } from "@/ui/components/ui/button";
 import {
@@ -124,6 +125,10 @@ export function LeadsList({ leads, selectedLeadId, onSelectLead }: LeadsListProp
   const columns = useMemo(
     () =>
       columnHelper.columns([
+        columnHelper.accessor("status", {
+          header: "Status",
+          cell: ({ getValue }) => <LeadStatusBadge status={getValue()} />,
+        }),
         columnHelper.accessor("company_name", {
           header: "Company",
           cell: ({ row }) => <CompanyCell lead={row.original} />,

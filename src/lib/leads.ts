@@ -26,6 +26,25 @@ export const REPLY_TYPE_LABELS: Record<ReplyType, string> = {
   ooo: "OOO",
 };
 
+export const LEAD_STATUSES = [
+  "new",
+  "attempted",
+  "needs_follow_up",
+  "meeting_booked",
+  "not_interested",
+  "do_not_contact",
+] as const;
+export const leadStatusSchema = z.enum(LEAD_STATUSES);
+export type LeadStatus = z.infer<typeof leadStatusSchema>;
+export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
+  new: "New",
+  attempted: "Attempted",
+  needs_follow_up: "Needs follow-up",
+  meeting_booked: "Meeting booked",
+  not_interested: "Not interested",
+  do_not_contact: "Do not contact",
+};
+
 const jsonRecordSchema = z.record(z.string(), z.unknown());
 
 export const leadListItemSchema = z.object({
@@ -41,6 +60,8 @@ export const leadListItemSchema = z.object({
   linkedin_profile: z.string().nullable(),
   enriched_phone_number: z.string().nullable(),
   phone_source: phoneSourceSchema.nullable(),
+  status: leadStatusSchema,
+  notes: z.string().nullable(),
   positive_conversation_count: z.number().int(),
   ooo_conversation_count: z.number().int(),
   latest_reply_at: z.string().nullable(),
@@ -100,6 +121,8 @@ export const leadDetailLeadSchema = z.object({
   linkedin_profile: z.string().nullable().optional(),
   enriched_phone_number: z.string().nullable().optional(),
   phone_source: phoneSourceSchema.nullable().optional(),
+  status: leadStatusSchema.optional(),
+  notes: z.string().nullable().optional(),
   properties: jsonRecordSchema.optional(),
   custom_properties: jsonRecordSchema.optional(),
   chat_refreshed_at: z.string().nullable().optional(),
@@ -121,6 +144,7 @@ export type ListLeadsParams = {
   limit?: number;
   offset?: number;
   replyType?: ReplyType | null;
+  status?: LeadStatus | null;
   signal?: AbortSignal;
 };
 
@@ -128,6 +152,12 @@ export type LeadListQueryParams = {
   limit: number;
   offset: number;
   replyType: ReplyType | null;
+  status: LeadStatus | null;
+};
+
+export type LeadUpdate = {
+  status?: LeadStatus | null;
+  notes?: string | null;
 };
 
 export const leadKeys = {
@@ -147,6 +177,9 @@ export function listLeads(params: ListLeadsParams = {}) {
   if (params.replyType) {
     search.set("reply_type", params.replyType);
   }
+  if (params.status) {
+    search.set("status", params.status);
+  }
   const query = search.toString();
   return apiFetch<LeadListResponse>(`/leads${query ? `?${query}` : ""}`, {
     signal: params.signal,
@@ -155,6 +188,13 @@ export function listLeads(params: ListLeadsParams = {}) {
 
 export function getLead(leadId: string, signal?: AbortSignal) {
   return apiFetch<LeadDetailResponse>(`/leads/${leadId}`, { signal });
+}
+
+export function updateLead(leadId: string, input: LeadUpdate) {
+  return apiFetch<LeadDetailLead>(`/leads/${leadId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export function leadDisplayName(lead: {
@@ -193,6 +233,13 @@ export function replyTypeLabel(replyType: string | null | undefined) {
     return REPLY_TYPE_LABELS[replyType as ReplyType];
   }
   return replyType ?? null;
+}
+
+export function leadStatusLabel(status: string | null | undefined) {
+  if (status && status in LEAD_STATUS_LABELS) {
+    return LEAD_STATUS_LABELS[status as LeadStatus];
+  }
+  return status ?? null;
 }
 
 export function messageDirection(reply: {

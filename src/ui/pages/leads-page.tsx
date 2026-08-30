@@ -2,13 +2,17 @@ import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   LEAD_PAGE_SIZE,
+  LEAD_STATUSES,
+  LEAD_STATUS_LABELS,
   leadKeys,
   listLeads,
   REPLY_TYPE_LABELS,
   type LeadListItem,
+  type LeadStatus,
   type ReplyType,
 } from "@/lib/leads";
 import { mutationErrorMessage } from "@/lib/tables";
+import { cn } from "@/lib/utils";
 import { LeadDetailDrawer } from "@/ui/components/leads/lead-detail-drawer";
 import { LeadsList } from "@/ui/components/leads/leads-list";
 import { Button } from "@/ui/components/ui/button";
@@ -22,11 +26,12 @@ const nativeSelectClass =
 export function LeadsPage() {
   const [offset, setOffset] = useState(0);
   const [replyType, setReplyType] = useState<ReplyType | null>(null);
+  const [status, setStatus] = useState<LeadStatus | null>(null);
   const [selectedLead, setSelectedLead] = useState<LeadListItem | null>(null);
 
   const listParams = useMemo(
-    () => ({ limit: LEAD_PAGE_SIZE, offset, replyType }),
-    [offset, replyType],
+    () => ({ limit: LEAD_PAGE_SIZE, offset, replyType, status }),
+    [offset, replyType, status],
   );
 
   const leadsQuery = useQuery({
@@ -51,6 +56,13 @@ export function LeadsPage() {
     setOffset(0);
   }
 
+  function handleStatusChange(value: string) {
+    setStatus(value === "" ? null : (value as LeadStatus));
+    setOffset(0);
+  }
+
+  const hasFilters = Boolean(replyType || status);
+
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6 p-6 md:p-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -60,25 +72,50 @@ export function LeadsPage() {
             Imported SmartLead contacts, replies, and phone enrichment.
           </p>
         </div>
-        <div className="relative w-full sm:w-auto">
-          <label htmlFor="lead-reply-type" className="sr-only">
-            Filter by reply type
-          </label>
-          <select
-            id="lead-reply-type"
-            className={nativeSelectClass}
-            value={replyType ?? ""}
-            onChange={(event) => handleReplyTypeChange(event.target.value)}
-          >
-            <option value="">All replies</option>
-            <option value="positive">{REPLY_TYPE_LABELS.positive}</option>
-            <option value="ooo">{REPLY_TYPE_LABELS.ooo}</option>
-          </select>
-          <HugeiconsIcon
-            icon={UnfoldMoreIcon}
-            strokeWidth={2}
-            className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-          />
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <div className="relative w-full sm:w-auto">
+            <label htmlFor="lead-status" className="sr-only">
+              Filter by status
+            </label>
+            <select
+              id="lead-status"
+              className={cn(nativeSelectClass, "w-full sm:w-auto")}
+              value={status ?? ""}
+              onChange={(event) => handleStatusChange(event.target.value)}
+            >
+              <option value="">All statuses</option>
+              {LEAD_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {LEAD_STATUS_LABELS[value]}
+                </option>
+              ))}
+            </select>
+            <HugeiconsIcon
+              icon={UnfoldMoreIcon}
+              strokeWidth={2}
+              className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+          </div>
+          <div className="relative w-full sm:w-auto">
+            <label htmlFor="lead-reply-type" className="sr-only">
+              Filter by reply type
+            </label>
+            <select
+              id="lead-reply-type"
+              className={cn(nativeSelectClass, "w-full sm:w-auto")}
+              value={replyType ?? ""}
+              onChange={(event) => handleReplyTypeChange(event.target.value)}
+            >
+              <option value="">All replies</option>
+              <option value="positive">{REPLY_TYPE_LABELS.positive}</option>
+              <option value="ooo">{REPLY_TYPE_LABELS.ooo}</option>
+            </select>
+            <HugeiconsIcon
+              icon={UnfoldMoreIcon}
+              strokeWidth={2}
+              className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+          </div>
         </div>
       </div>
 
@@ -93,11 +130,11 @@ export function LeadsPage() {
       ) : items.length === 0 ? (
         <div className="flex min-h-40 flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/30 p-8">
           <p className="text-sm font-medium text-foreground">
-            {replyType ? "No matching leads" : "No leads yet"}
+            {hasFilters ? "No matching leads" : "No leads yet"}
           </p>
           <p className="text-sm text-muted-foreground">
-            {replyType
-              ? "Try another reply type, or import more SmartLead conversations."
+            {hasFilters
+              ? "Try another status or reply type, or import more SmartLead conversations."
               : "Imported SmartLead replies will show up here."}
           </p>
         </div>

@@ -1,19 +1,23 @@
-import { type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { type ReactNode, useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   formatMessageTime,
   formatPropertyValue,
   getLead,
   hrefFromUrl,
+  LEAD_STATUSES,
+  LEAD_STATUS_LABELS,
   leadDisplayName,
   leadKeys,
   leadPhone,
   messageDirection,
   propertyEntries,
   replyTypeLabel,
+  updateLead,
   type LeadConversation,
   type LeadListItem,
   type LeadReply,
+  type LeadStatus,
 } from "@/lib/leads";
 import { omitLeadingSubject, parseMessageBody, type MessageBlock, type MessageInline } from "@/lib/message-body";
 import { mutationErrorMessage } from "@/lib/tables";
@@ -34,7 +38,14 @@ import {
   Cancel01Icon,
   LinkSquare02Icon,
   Mail01Icon,
+  UnfoldMoreIcon,
 } from "@hugeicons/core-free-icons";
+
+const nativeSelectClass =
+  "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
+
+const textareaClass =
+  "min-h-24 w-full resize-y rounded-lg border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
 
 type LeadDetailDrawerProps = {
   open: boolean;
@@ -152,7 +163,9 @@ export function LeadDetailDrawer({
                   <IconField icon={Mail01Icon} label="Email" value={lead.email} />
                   <IconField icon={Call02Icon} label="Phone" value={phone} />
                 </dl>
+                <LeadStatusField leadId={lead.id} status={lead.status ?? "new"} />
                 <PropertySection label="Custom properties" record={lead.custom_properties} />
+                <LeadNotesSection leadId={lead.id} notes={lead.notes} />
               </div>
 
               <ConversationThread conversations={conversations} />
@@ -378,6 +391,101 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
       </h3>
       {children}
     </section>
+  );
+}
+
+function LeadStatusField({
+  leadId,
+  status,
+}: {
+  leadId: string;
+  status: LeadStatus;
+}) {
+  const queryClient = useQueryClient();
+  const save = useMutation({
+    mutationFn: (next: LeadStatus) => updateLead(leadId, { status: next }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
+      await queryClient.invalidateQueries({ queryKey: leadKeys.all });
+    },
+  });
+  const error = mutationErrorMessage(save.error, save.isError ? "Failed to update status" : "");
+
+  return (
+    <Section label="Status">
+      <div className="relative">
+        <label htmlFor="lead-detail-status" className="sr-only">
+          Lead status
+        </label>
+        <select
+          id="lead-detail-status"
+          className={cn(nativeSelectClass, "w-full")}
+          value={status}
+          disabled={save.isPending}
+          onChange={(event) => save.mutate(event.target.value as LeadStatus)}
+        >
+          {LEAD_STATUSES.map((value) => (
+            <option key={value} value={value}>
+              {LEAD_STATUS_LABELS[value]}
+            </option>
+          ))}
+        </select>
+        <HugeiconsIcon
+          icon={UnfoldMoreIcon}
+          strokeWidth={2}
+          className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+      </div>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </Section>
+  );
+}
+
+function LeadNotesSection({
+  leadId,
+  notes,
+}: {
+  leadId: string;
+  notes: string | null | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const saved = notes ?? "";
+  const [draft, setDraft] = useState(saved);
+
+  useEffect(() => {
+    setDraft(saved);
+  }, [leadId, saved]);
+
+  const save = useMutation({
+    mutationFn: () => {
+      const trimmed = draft.trim();
+      return updateLead(leadId, { notes: trimmed.length > 0 ? trimmed : null });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
+      await queryClient.invalidateQueries({ queryKey: leadKeys.all });
+    },
+  });
+  const dirty = draft !== saved;
+  const error = mutationErrorMessage(save.error, save.isError ? "Failed to save notes" : "");
+
+  return (
+    <Section label="Notes">
+      <textarea
+        className={textareaClass}
+        value={draft}
+        rows={4}
+        placeholder="Add a note"
+        disabled={save.isPending}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+      <div className="flex items-center justify-end gap-2">
+        {error ? <p className="mr-auto text-xs text-destructive">{error}</p> : null}
+        <Button type="button" size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+          {save.isPending ? "Saving..." : "Save"}
+        </Button>
+      </div>
+    </Section>
   );
 }
 
