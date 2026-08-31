@@ -1,0 +1,15 @@
+.git
+.cursor
+.vscode
+.zed
+node_modules
+dist
+.env
+.env.*
+*.local
+.DS_Store
+Dockerfile
+.dockerignore
+AGENTS.md
+README.md
+**/*.md
