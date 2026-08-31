@@ -1,28 +1,34 @@
 import { z } from "zod";
 import rolesJson from "@/lib/roles.json";
 
-export const roles = rolesJson;
+const invitePermissions = {
+  admin: ["admin", "sales_lead", "sdr"],
+  sales_lead: ["sdr"],
+  sdr: [],
+} as const;
 
-export const roleIds = roles.map((role) => role.id) as [
-  (typeof roles)[number]["id"],
-  ...(typeof roles)[number]["id"][],
+export type AppRole = keyof typeof invitePermissions;
+
+export const INVITE_PERMISSIONS: Record<AppRole, readonly AppRole[]> =
+  invitePermissions;
+
+export const roleIds = Object.keys(INVITE_PERMISSIONS) as [
+  AppRole,
+  ...AppRole[],
 ];
 
 export const appRoleSchema = z.enum(roleIds);
 
-export type AppRole = z.infer<typeof appRoleSchema>;
+export const roles = rolesJson.map((role) => ({
+  ...role,
+  id: appRoleSchema.parse(role.id),
+}));
 
 export const ADMIN_ROLE = "admin" as const satisfies AppRole;
 
 export function isAdminRole(role: string | undefined | null): boolean {
   return role === ADMIN_ROLE;
 }
-
-export const INVITE_PERMISSIONS = {
-  admin: ["admin", "sales_lead", "sdr"],
-  sales_lead: ["sdr"],
-  sdr: [],
-} as const satisfies Record<AppRole, readonly AppRole[]>;
 
 export function getInvitableRoles(role: AppRole | null | undefined) {
   if (!role) {

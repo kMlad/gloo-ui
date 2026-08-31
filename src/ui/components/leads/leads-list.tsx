@@ -104,12 +104,13 @@ function PhoneCell({ lead }: { lead: LeadListItem }) {
   if (!phone) {
     return emptyCell(null);
   }
+  const phoneNumber = phone;
 
   async function copyPhone(event: MouseEvent<HTMLButtonElement>) {
     stopRowActivation(event);
     event.preventDefault();
     try {
-      await navigator.clipboard.writeText(phone);
+      await navigator.clipboard.writeText(phoneNumber);
       setCopied(true);
     } catch {
       setCopied(false);
