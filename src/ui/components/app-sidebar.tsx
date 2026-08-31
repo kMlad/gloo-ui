@@ -13,7 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/ui/components/ui/sidebar"
-import { canInvite, canManageSmartlead } from "@/lib/roles"
+import { canAssignLeads, canInvite, canManageSmartlead } from "@/lib/roles"
 import { useAuth } from "@/providers/auth-context"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
@@ -23,6 +23,7 @@ import {
   GridTableIcon,
   Mail01Icon,
   UserAdd01Icon,
+  UserCheck01Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons"
 
@@ -39,6 +40,9 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     { title: "Dashboard", url: "/dashboard", icon: DashboardSquare01Icon },
     { title: "Tables", url: "/tables", icon: GridTableIcon },
     { title: "Leads", url: "/leads", icon: UserGroupIcon },
+    ...(canAssignLeads(role)
+      ? [{ title: "Assign leads", url: "/assign-leads", icon: UserCheck01Icon }]
+      : []),
     ...(canManageSmartlead(role)
       ? [
           { title: "Campaigns", url: "/campaigns", icon: Mail01Icon },

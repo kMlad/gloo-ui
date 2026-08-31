@@ -11,8 +11,11 @@ import {
   type LeadStatus,
   type ReplyType,
 } from "@/lib/leads";
+import { canAssignLeads } from "@/lib/roles";
+import { listSdrs, sdrEmailById, sdrKeys } from "@/lib/sdrs";
 import { mutationErrorMessage } from "@/lib/tables";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-context";
 import { LeadDetailDrawer } from "@/ui/components/leads/lead-detail-drawer";
 import { LeadsList } from "@/ui/components/leads/leads-list";
 import { Button } from "@/ui/components/ui/button";
@@ -24,13 +27,22 @@ const nativeSelectClass =
   "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30";
 
 export function LeadsPage() {
+  const { role } = useAuth();
   const [offset, setOffset] = useState(0);
   const [replyType, setReplyType] = useState<ReplyType | null>(null);
   const [status, setStatus] = useState<LeadStatus | null>(null);
   const [selectedLead, setSelectedLead] = useState<LeadListItem | null>(null);
+  const showAssignee = canAssignLeads(role);
 
   const listParams = useMemo(
-    () => ({ limit: LEAD_PAGE_SIZE, offset, replyType, status }),
+    () => ({
+      limit: LEAD_PAGE_SIZE,
+      offset,
+      replyType,
+      status,
+      campaignId: null,
+      assignmentStatus: null,
+    }),
     [offset, replyType, status],
   );
 
@@ -39,6 +51,14 @@ export function LeadsPage() {
     queryFn: ({ signal }) => listLeads({ ...listParams, signal }),
     placeholderData: keepPreviousData,
   });
+
+  const sdrsQuery = useQuery({
+    queryKey: sdrKeys.all,
+    queryFn: ({ signal }) => listSdrs(signal),
+    enabled: showAssignee,
+  });
+
+  const assigneeEmails = showAssignee ? sdrEmailById(sdrsQuery.data ?? []) : undefined;
 
   const items = leadsQuery.data?.items ?? [];
   const total = leadsQuery.data?.total ?? 0;
@@ -144,6 +164,7 @@ export function LeadsPage() {
             leads={items}
             selectedLeadId={selectedLead?.id ?? null}
             onSelectLead={setSelectedLead}
+            assigneeEmails={assigneeEmails}
           />
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">

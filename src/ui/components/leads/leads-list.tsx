@@ -4,11 +4,13 @@ import {
   hrefFromUrl,
   leadDisplayName,
   leadPhone,
+  leadSourceCampaignLabel,
   type LeadListItem,
 } from "@/lib/leads";
 import { LeadStatusBadge } from "@/ui/components/leads/lead-status-badge";
 import { tableListFeatures, type TableListFeatures } from "@/ui/components/tables/data-table-features";
 import { Button } from "@/ui/components/ui/button";
+import { Checkbox } from "@/ui/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -29,10 +31,20 @@ import {
 
 const columnHelper = createColumnHelper<TableListFeatures, LeadListItem>();
 
+type LeadSelection = {
+  selectedIds: string[];
+  allMatching: boolean;
+  onToggle: (leadId: string, selected: boolean) => void;
+  onTogglePage: (selected: boolean) => void;
+};
+
 type LeadsListProps = {
   leads: LeadListItem[];
   selectedLeadId: string | null;
   onSelectLead: (lead: LeadListItem) => void;
+  selection?: LeadSelection;
+  showCampaigns?: boolean;
+  assigneeEmails?: Record<string, string>;
 };
 
 function emptyCell(value: string | number | null | undefined) {
@@ -121,10 +133,55 @@ function PhoneCell({ lead }: { lead: LeadListItem }) {
   );
 }
 
-export function LeadsList({ leads, selectedLeadId, onSelectLead }: LeadsListProps) {
+export function LeadsList({
+  leads,
+  selectedLeadId,
+  onSelectLead,
+  selection,
+  showCampaigns = false,
+  assigneeEmails,
+}: LeadsListProps) {
+  const selectedSet = useMemo(
+    () => new Set(selection?.selectedIds ?? []),
+    [selection?.selectedIds],
+  );
+  const allPageSelected =
+    Boolean(selection) &&
+    leads.length > 0 &&
+    (selection?.allMatching || leads.every((lead) => selectedSet.has(lead.id)));
+
   const columns = useMemo(
     () =>
       columnHelper.columns([
+        ...(selection
+          ? [
+              columnHelper.display({
+                id: "select",
+                header: () => (
+                  <Checkbox
+                    checked={allPageSelected}
+                    aria-label={allPageSelected ? "Deselect all leads on this page" : "Select all leads on this page"}
+                    onCheckedChange={(checked) => selection.onTogglePage(checked === true)}
+                  />
+                ),
+                cell: ({ row }) => {
+                  const selected = selection.allMatching || selectedSet.has(row.original.id);
+                  return (
+                    <Checkbox
+                      checked={selected}
+                      aria-label={`Select ${leadDisplayName(row.original)}`}
+                      onClick={stopRowActivation}
+                      onKeyDown={stopRowActivation}
+                      onCheckedChange={(checked) =>
+                        selection.onToggle(row.original.id, checked === true)
+                      }
+                    />
+                  );
+                },
+                enableSorting: false,
+              }),
+            ]
+          : []),
         columnHelper.accessor("status", {
           header: "Status",
           cell: ({ getValue }) => <LeadStatusBadge status={getValue()} />,
@@ -140,6 +197,29 @@ export function LeadsList({ leads, selectedLeadId, onSelectLead }: LeadsListProp
             <span className="font-medium text-foreground">{getValue() || row.original.email}</span>
           ),
         }),
+        ...(showCampaigns
+          ? [
+              columnHelper.accessor((row) => leadSourceCampaignLabel(row) ?? "", {
+                id: "campaigns",
+                header: "Campaign",
+                cell: ({ getValue }) => emptyCell(getValue()),
+              }),
+            ]
+          : []),
+        ...(assigneeEmails
+          ? [
+              columnHelper.accessor((row) => {
+                if (!row.assigned_sdr_id) {
+                  return "";
+                }
+                return assigneeEmails[row.assigned_sdr_id] ?? "Assigned";
+              }, {
+                id: "assignee",
+                header: "Assignee",
+                cell: ({ getValue }) => emptyCell(getValue()),
+              }),
+            ]
+          : []),
         columnHelper.accessor("location", {
           header: "Location",
           cell: ({ getValue }) => emptyCell(getValue()),
@@ -150,7 +230,7 @@ export function LeadsList({ leads, selectedLeadId, onSelectLead }: LeadsListProp
           cell: ({ row }) => <PhoneCell lead={row.original} />,
         }),
       ]),
-    [],
+    [allPageSelected, assigneeEmails, selectedSet, selection, showCampaigns],
   );
 
   const table = useTable({

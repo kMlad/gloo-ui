@@ -1,3 +1,4 @@
 - Always assume there's a dev server running on port 5173. If not, ask the user to run the server, do not ever run a dev server on your own.
 - Never install dependencies on your own. If something needs to be installed, type out the dependency list in a way that's easily copyable by the user. As we're using Vite Plus for dependency management, the command should be `vp add dependency-name`, i.e. `vp add react`
 - All React components live under `src/ui/components/` — there is no top-level `src/components/` folder. Shared primitives (shadcn) go in `src/ui/components/ui/`, feature/app components (e.g. `app-sidebar.tsx`, `nav-user.tsx`) directly in `src/ui/components/`, and auth-flow components in `src/ui/components/auth-components/`. Import them via the `@/ui/components/...` alias (shadcn's `components.json` is configured to generate into these paths).
+- The API docs are accessible on localhost:8000/docs

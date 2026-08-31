@@ -47,6 +47,18 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 
 const jsonRecordSchema = z.record(z.string(), z.unknown());
 
+export const ASSIGNMENT_STATUSES = ["assigned", "unassigned"] as const;
+export const assignmentStatusSchema = z.enum(ASSIGNMENT_STATUSES);
+export type AssignmentStatus = z.infer<typeof assignmentStatusSchema>;
+
+export const leadSourceSchema = z.object({
+  smartlead_campaign_id: z.number().int(),
+  name: z.string(),
+  reply_type: replyTypeSchema.nullable(),
+  qualified_at: z.string(),
+});
+export type LeadSource = z.infer<typeof leadSourceSchema>;
+
 export const leadListItemSchema = z.object({
   id: z.string().uuid(),
   email: z.string(),
@@ -65,6 +77,10 @@ export const leadListItemSchema = z.object({
   positive_conversation_count: z.number().int(),
   ooo_conversation_count: z.number().int(),
   latest_reply_at: z.string().nullable(),
+  source_campaigns: z.array(leadSourceSchema).optional().default([]),
+  assigned_sdr_id: z.string().uuid().nullable().optional(),
+  assigned_by: z.string().uuid().nullable().optional(),
+  assigned_at: z.string().nullable().optional(),
 });
 export type LeadListItem = z.infer<typeof leadListItemSchema>;
 
@@ -139,12 +155,16 @@ export const leadDetailResponseSchema = z.object({
 export type LeadDetailResponse = z.infer<typeof leadDetailResponseSchema>;
 
 export const LEAD_PAGE_SIZE = 50;
+export const LEAD_ID_PAGE_SIZE = 100;
+export const LEAD_ASSIGN_CHUNK_SIZE = 100;
 
 export type ListLeadsParams = {
   limit?: number;
   offset?: number;
   replyType?: ReplyType | null;
   status?: LeadStatus | null;
+  campaignId?: number | null;
+  assignmentStatus?: AssignmentStatus | null;
   signal?: AbortSignal;
 };
 
@@ -153,11 +173,26 @@ export type LeadListQueryParams = {
   offset: number;
   replyType: ReplyType | null;
   status: LeadStatus | null;
+  campaignId: number | null;
+  assignmentStatus: AssignmentStatus | null;
 };
 
 export type LeadUpdate = {
   status?: LeadStatus | null;
   notes?: string | null;
+};
+
+export type LeadAssignmentRequest = {
+  lead_ids: string[];
+  sdr_id: string;
+};
+
+export type LeadAssignmentResponse = {
+  sdr_id: string;
+  assigned_lead_ids: string[];
+  skipped_lead_ids: string[];
+  assigned_count: number;
+  skipped_count: number;
 };
 
 export const leadKeys = {
@@ -180,10 +215,34 @@ export function listLeads(params: ListLeadsParams = {}) {
   if (params.status) {
     search.set("status", params.status);
   }
+  if (params.campaignId != null) {
+    search.set("campaign_id", String(params.campaignId));
+  }
+  if (params.assignmentStatus) {
+    search.set("assignment_status", params.assignmentStatus);
+  }
   const query = search.toString();
   return apiFetch<LeadListResponse>(`/leads${query ? `?${query}` : ""}`, {
     signal: params.signal,
   });
+}
+
+export async function listAllLeadIds(params: Omit<ListLeadsParams, "limit" | "offset"> = {}) {
+  const ids: string[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await listLeads({
+      ...params,
+      limit: LEAD_ID_PAGE_SIZE,
+      offset,
+    });
+    ids.push(...page.items.map((item) => item.id));
+    offset += page.items.length;
+    if (page.items.length === 0 || ids.length >= page.total) {
+      break;
+    }
+  }
+  return ids;
 }
 
 export function getLead(leadId: string, signal?: AbortSignal) {
@@ -195,6 +254,44 @@ export function updateLead(leadId: string, input: LeadUpdate) {
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export function assignLeads(input: LeadAssignmentRequest) {
+  return apiFetch<LeadAssignmentResponse>("/leads/assignments", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function assignLeadsInChunks(input: LeadAssignmentRequest) {
+  const assignedLeadIds: string[] = [];
+  const skippedLeadIds: string[] = [];
+  for (let index = 0; index < input.lead_ids.length; index += LEAD_ASSIGN_CHUNK_SIZE) {
+    const chunk = input.lead_ids.slice(index, index + LEAD_ASSIGN_CHUNK_SIZE);
+    const result = await assignLeads({ lead_ids: chunk, sdr_id: input.sdr_id });
+    assignedLeadIds.push(...result.assigned_lead_ids);
+    skippedLeadIds.push(...result.skipped_lead_ids);
+  }
+  return {
+    sdr_id: input.sdr_id,
+    assigned_lead_ids: assignedLeadIds,
+    skipped_lead_ids: skippedLeadIds,
+    assigned_count: assignedLeadIds.length,
+    skipped_count: skippedLeadIds.length,
+  } satisfies LeadAssignmentResponse;
+}
+
+export function leadSourceCampaignLabel(lead: {
+  source_campaigns?: LeadSource[] | null;
+}) {
+  const names = [
+    ...new Set(
+      (lead.source_campaigns ?? [])
+        .map((source) => source.name.trim())
+        .filter((name) => name.length > 0),
+    ),
+  ];
+  return names.length > 0 ? names.join(", ") : null;
 }
 
 export function leadDisplayName(lead: {
