@@ -35,3 +35,7 @@ export function getInvitableRoles(role: AppRole | null | undefined) {
 export function canInvite(role: AppRole | null | undefined): boolean {
   return getInvitableRoles(role).length > 0;
 }
+
+export function canManageSmartlead(role: AppRole | null | undefined): boolean {
+  return role === "admin" || role === "sales_lead";
+}

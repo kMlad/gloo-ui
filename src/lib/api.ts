@@ -36,6 +36,13 @@ function messageFromDetail(detail: unknown): string | null {
   if (typeof detail === "string" && detail.length > 0) {
     return detail;
   }
+  if (typeof detail === "object" && detail !== null && !Array.isArray(detail)) {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string" && message.length > 0) {
+      return message;
+    }
+    return null;
+  }
   if (!Array.isArray(detail)) {
     return null;
   }

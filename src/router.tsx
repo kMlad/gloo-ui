@@ -4,6 +4,7 @@ import { ProtectedLayout } from "./ui/layouts/protected-layout";
 import { PasswordRequiredLayout } from "./ui/layouts/password-required-layout";
 import { AppLayout } from "./ui/layouts/app-layout";
 import { InviteLayout } from "./ui/layouts/invite-layout";
+import { SmartleadLayout } from "./ui/layouts/smartlead-layout";
 import { DashboardPage } from "./ui/pages/dashboard-page";
 import { LoginPage } from "./ui/pages/login-page";
 import { ForgotPasswordPage } from "./ui/pages/forgot-password-page";
@@ -12,6 +13,8 @@ import { InviteUserPage } from "./ui/pages/invite-user-page";
 import { TablesPage } from "./ui/pages/tables-page";
 import { TableDetailPage } from "./ui/pages/table-detail-page";
 import { LeadsPage } from "./ui/pages/leads-page";
+import { CampaignsPage } from "./ui/pages/campaigns-page";
+import { ImportsPage } from "./ui/pages/imports-page";
 
 export const router = createBrowserRouter([
   {
@@ -63,6 +66,19 @@ export const router = createBrowserRouter([
               {
                 path: "/leads",
                 Component: LeadsPage,
+              },
+              {
+                Component: SmartleadLayout,
+                children: [
+                  {
+                    path: "/campaigns",
+                    Component: CampaignsPage,
+                  },
+                  {
+                    path: "/imports",
+                    Component: ImportsPage,
+                  },
+                ],
               },
               {
                 Component: InviteLayout,
