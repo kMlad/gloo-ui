@@ -1,10 +1,20 @@
 import { useMemo, type KeyboardEvent, type MouseEvent } from "react";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
-import { type Campaign } from "@/lib/smartlead";
+import { REPLY_TYPE_LABELS, type ReplyType } from "@/lib/leads";
+import {
+  dedicatedImportLeadCount,
+  importRunIsActive,
+  type Campaign,
+  type ImportRun,
+} from "@/lib/smartlead";
 import { formatTableDate } from "@/lib/tables";
-import { cn } from "@/lib/utils";
-import { tableListFeatures, type TableListFeatures } from "@/ui/components/tables/data-table-features";
-import { Checkbox } from "@/ui/components/ui/checkbox";
+import { ImportStatusBadge } from "@/ui/components/imports/run-status-badge";
+import { CampaignStatusBadge } from "@/ui/components/campaigns/campaign-status-badge";
+import {
+  tableListFeatures,
+  type TableListFeatures,
+} from "@/ui/components/tables/data-table-features";
+import { Button } from "@/ui/components/ui/button";
 import {
   Table,
   TableBody,
@@ -18,17 +28,20 @@ import {
   ArrowDown01Icon,
   ArrowUp01Icon,
   ArrowUpDownIcon,
-  Cancel01Icon,
-  Tick02Icon,
+  Download01Icon,
+  Loading03Icon,
 } from "@hugeicons/core-free-icons";
 
 const columnHelper = createColumnHelper<TableListFeatures, Campaign>();
 
 type CampaignsListProps = {
   campaigns: Campaign[];
-  selectedIds: number[];
-  onToggle: (campaignId: number, selected: boolean) => void;
-  onToggleAll: (selected: boolean) => void;
+  selectedCampaignId: number | null;
+  latestRunFor: (campaignId: number, replyType: ReplyType) => ImportRun | null;
+  importing: { campaignId: number; replyType: ReplyType } | null;
+  importLocked: boolean;
+  onSelectCampaign: (campaign: Campaign) => void;
+  onImport: (campaign: Campaign, replyType: ReplyType) => void;
 };
 
 function emptyCell(value: string | number | null | undefined) {
@@ -42,88 +55,76 @@ function stopRowActivation(event: MouseEvent | KeyboardEvent) {
   event.stopPropagation();
 }
 
-const CAMPAIGN_STATUS_CLASS: Record<string, string> = {
-  active: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  inprogress: "border-primary/20 bg-primary/10 text-primary",
-  paused: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  stopped: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  completed: "border-border/70 bg-muted/40 text-foreground",
-  drafted: "border-border/70 bg-muted/60 text-muted-foreground",
-  draft: "border-border/70 bg-muted/60 text-muted-foreground",
-  archived: "border-border/70 bg-muted/60 text-muted-foreground",
-};
+function ReplyImportCell({
+  campaign,
+  replyType,
+  count,
+  run,
+  importing,
+  importLocked,
+  onImport,
+}: {
+  campaign: Campaign;
+  replyType: ReplyType;
+  count: number;
+  run: ImportRun | null;
+  importing: { campaignId: number; replyType: ReplyType } | null;
+  importLocked: boolean;
+  onImport: (campaign: Campaign, replyType: ReplyType) => void;
+}) {
+  const isThisImport =
+    importing?.campaignId === campaign.smartlead_campaign_id && importing.replyType === replyType;
+  const runActive = Boolean(run && importRunIsActive(run.status));
+  const busy = isThisImport || runActive;
+  const disabled = busy || (importLocked && !isThisImport);
 
-const CAMPAIGN_STATUS_FALLBACK_CLASS =
-  "border-border/70 bg-muted/60 text-muted-foreground";
-
-function campaignStatusKey(status: string) {
-  return status.trim().toLowerCase().replace(/[\s_-]+/g, "");
-}
-
-function campaignStatusLabel(status: string) {
-  const normalized = status.trim().replace(/[_-]+/g, " ");
-  if (!normalized) {
-    return status;
-  }
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
-}
-
-function CampaignStatusBadge({ status }: { status: string }) {
-  const key = campaignStatusKey(status);
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
-        CAMPAIGN_STATUS_CLASS[key] ?? CAMPAIGN_STATUS_FALLBACK_CLASS,
-      )}
-    >
-      {campaignStatusLabel(status)}
-    </span>
+    <div className="flex items-center gap-2">
+      <span className="min-w-6 tabular-nums">{count}</span>
+      {run ? <ImportStatusBadge status={run.status} /> : null}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={disabled}
+        aria-label={`Import ${REPLY_TYPE_LABELS[replyType].toLowerCase()} replies from ${campaign.name}`}
+        onClick={(event) => {
+          stopRowActivation(event);
+          onImport(campaign, replyType);
+        }}
+        onKeyDown={stopRowActivation}
+      >
+        {busy ? (
+          <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="animate-spin" />
+        ) : (
+          <HugeiconsIcon icon={Download01Icon} strokeWidth={2} />
+        )}
+        {busy ? "Importing…" : run ? "Re-import" : "Import"}
+      </Button>
+    </div>
   );
 }
 
 export function CampaignsList({
   campaigns,
-  selectedIds,
-  onToggle,
-  onToggleAll,
+  selectedCampaignId,
+  latestRunFor,
+  importing,
+  importLocked,
+  onSelectCampaign,
+  onImport,
 }: CampaignsListProps) {
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const allSelected = campaigns.length > 0 && campaigns.every((campaign) => selectedSet.has(campaign.smartlead_campaign_id));
-
   const columns = useMemo(
     () =>
       columnHelper.columns([
-        columnHelper.display({
-          id: "select",
-          header: () => (
-            <Checkbox
-              checked={allSelected}
-              aria-label={allSelected ? "Deselect all campaigns" : "Select all campaigns"}
-              onCheckedChange={(checked) => onToggleAll(checked === true)}
-            />
-          ),
-          cell: ({ row }) => {
-            const id = row.original.smartlead_campaign_id;
-            const selected = selectedSet.has(id);
-            return (
-              <Checkbox
-                checked={selected}
-                aria-label={`Select ${row.original.name}`}
-                onClick={stopRowActivation}
-                onKeyDown={stopRowActivation}
-                onCheckedChange={(checked) => onToggle(id, checked === true)}
-              />
-            );
-          },
-          enableSorting: false,
-        }),
         columnHelper.accessor("name", {
           header: "Campaign",
           cell: ({ row }) => (
             <div className="flex min-w-0 flex-col">
               <span className="truncate font-medium text-foreground">{row.original.name}</span>
-              <span className="text-xs text-muted-foreground">{row.original.smartlead_campaign_id}</span>
+              <span className="text-xs text-muted-foreground">
+                {row.original.smartlead_campaign_id}
+              </span>
             </div>
           ),
         }),
@@ -137,28 +138,41 @@ export function CampaignsList({
             return <CampaignStatusBadge status={status} />;
           },
         }),
-        columnHelper.accessor("ever_imported", {
-          header: "Imported",
-          cell: ({ row }) =>
-            row.original.ever_imported ? (
-              <span className="inline-flex text-emerald-600 dark:text-emerald-400" title="Imported">
-                <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-4" />
-                <span className="sr-only">Imported</span>
-              </span>
-            ) : (
-              <span className="inline-flex text-muted-foreground" title="Not imported">
-                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-4" />
-                <span className="sr-only">Not imported</span>
-              </span>
-            ),
-        }),
         columnHelper.accessor("positive_lead_count", {
           header: "Positive",
-          cell: ({ getValue }) => <span className="tabular-nums">{getValue()}</span>,
+          enableSorting: false,
+          cell: ({ row }) => {
+            const run = latestRunFor(row.original.smartlead_campaign_id, "positive");
+            return (
+              <ReplyImportCell
+                campaign={row.original}
+                replyType="positive"
+                count={dedicatedImportLeadCount(run, row.original.positive_lead_count)}
+                run={run}
+                importing={importing}
+                importLocked={importLocked}
+                onImport={onImport}
+              />
+            );
+          },
         }),
         columnHelper.accessor("ooo_lead_count", {
           header: "OOO",
-          cell: ({ getValue }) => <span className="tabular-nums">{getValue()}</span>,
+          enableSorting: false,
+          cell: ({ row }) => {
+            const run = latestRunFor(row.original.smartlead_campaign_id, "ooo");
+            return (
+              <ReplyImportCell
+                campaign={row.original}
+                replyType="ooo"
+                count={dedicatedImportLeadCount(run, row.original.ooo_lead_count)}
+                run={run}
+                importing={importing}
+                importLocked={importLocked}
+                onImport={onImport}
+              />
+            );
+          },
         }),
         columnHelper.accessor("last_imported_at", {
           header: "Last imported",
@@ -168,7 +182,7 @@ export function CampaignsList({
           },
         }),
       ]),
-    [allSelected, onToggle, onToggleAll, selectedSet],
+    [importLocked, importing, latestRunFor, onImport],
   );
 
   const table = useTable({
@@ -220,14 +234,21 @@ export function CampaignsList({
         <TableBody>
           {table.getRowModel().rows.length ? (
             table.getRowModel().rows.map((row) => {
-              const selected = selectedSet.has(row.original.smartlead_campaign_id);
+              const selected = row.original.smartlead_campaign_id === selectedCampaignId;
               return (
                 <TableRow
                   key={row.id}
                   data-state={selected ? "selected" : undefined}
                   aria-selected={selected}
                   className="cursor-pointer"
-                  onClick={() => onToggle(row.original.smartlead_campaign_id, !selected)}
+                  tabIndex={0}
+                  onClick={() => onSelectCampaign(row.original)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectCampaign(row.original);
+                    }
+                  }}
                 >
                   {row.getAllCells().map((cell) => (
                     <TableCell key={cell.id}>
@@ -239,7 +260,10 @@ export function CampaignsList({
             })
           ) : (
             <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+              <TableCell
+                colSpan={columns.length}
+                className="h-24 text-center text-muted-foreground"
+              >
                 No campaigns yet.
               </TableCell>
             </TableRow>

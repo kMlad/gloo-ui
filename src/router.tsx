@@ -16,7 +16,6 @@ import { TableDetailPage } from "./ui/pages/table-detail-page";
 import { LeadsPage } from "./ui/pages/leads-page";
 import { AssignLeadsPage } from "./ui/pages/assign-leads-page";
 import { CampaignsPage } from "./ui/pages/campaigns-page";
-import { ImportsPage } from "./ui/pages/imports-page";
 
 export const router = createBrowserRouter([
   {
@@ -87,7 +86,7 @@ export const router = createBrowserRouter([
                   },
                   {
                     path: "/imports",
-                    Component: ImportsPage,
+                    element: <Navigate to="/campaigns" replace />,
                   },
                 ],
               },

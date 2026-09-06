@@ -1,7 +1,7 @@
-import { useState, type ComponentProps } from "react"
-import { Link, useLocation, useNavigate } from "react-router"
+import { useState, type ComponentProps } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 
-import { NavUser } from "@/ui/components/nav-user"
+import { NavUser } from "@/ui/components/nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -12,29 +12,28 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/ui/components/ui/sidebar"
-import { canAssignLeads, canInvite, canManageSmartlead } from "@/lib/roles"
-import { useAuth } from "@/providers/auth-context"
-import { HugeiconsIcon } from "@hugeicons/react"
+} from "@/ui/components/ui/sidebar";
+import { canAssignLeads, canInvite, canManageSmartlead } from "@/lib/roles";
+import { useAuth } from "@/providers/auth-context";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
   AlphabetGreekIcon,
   DashboardSquare01Icon,
-  Download01Icon,
   GridTableIcon,
   Mail01Icon,
   UserAdd01Icon,
   UserCheck01Icon,
   UserGroupIcon,
-} from "@hugeicons/core-free-icons"
+} from "@hugeicons/core-free-icons";
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
-  const { claims, role, signOut } = useAuth()
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [isSigningOut, setIsSigningOut] = useState(false)
+  const { claims, role, signOut } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const email = claims?.email ?? ""
-  const name = email.split("@")[0] || "Account"
+  const email = claims?.email ?? "";
+  const name = email.split("@")[0] || "Account";
 
   const navItems = [
     { title: "Dashboard", url: "/dashboard", icon: DashboardSquare01Icon },
@@ -44,21 +43,20 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       ? [{ title: "Assign leads", url: "/assign-leads", icon: UserCheck01Icon }]
       : []),
     ...(canManageSmartlead(role)
-      ? [
-          { title: "Campaigns", url: "/campaigns", icon: Mail01Icon },
-          { title: "Imports", url: "/imports", icon: Download01Icon },
-        ]
+      ? [{ title: "Campaigns", url: "/campaigns", icon: Mail01Icon }]
       : []),
-    ...(canInvite(role) ? [{ title: "Invite user", url: "/invite-user", icon: UserAdd01Icon }] : []),
-  ]
+    ...(canInvite(role)
+      ? [{ title: "Invite user", url: "/invite-user", icon: UserAdd01Icon }]
+      : []),
+  ];
 
   async function handleSignOut() {
-    setIsSigningOut(true)
+    setIsSigningOut(true);
     try {
-      await signOut()
-      void navigate("/login", { replace: true })
+      await signOut();
+      void navigate("/login", { replace: true });
     } catch {
-      setIsSigningOut(false)
+      setIsSigningOut(false);
     }
   }
 
@@ -106,5 +104,5 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         />
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

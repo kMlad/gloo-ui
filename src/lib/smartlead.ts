@@ -70,7 +70,7 @@ export const importRunListResponseSchema = z.object({
 });
 export type ImportRunListResponse = z.infer<typeof importRunListResponseSchema>;
 
-export const IMPORT_PAGE_SIZE = 25;
+export const CAMPAIGN_IMPORT_LOOKBACK = 100;
 
 export type ListImportsParams = {
   limit?: number;
@@ -157,6 +157,56 @@ export function importRunIsActive(status: ImportStatus) {
 
 export function importRunCanEnrich(run: ImportRun) {
   return (run.status === "succeeded" || run.status === "partial") && run.leads_processed > 0;
+}
+
+export function importRunIsDedicatedSlice(
+  run: ImportRun,
+  campaignId: number,
+  replyType: ReplyType,
+) {
+  return (
+    run.campaign_ids.length === 1 &&
+    run.campaign_ids[0] === campaignId &&
+    run.reply_types.length === 1 &&
+    run.reply_types[0] === replyType
+  );
+}
+
+export function mergeImportRuns(...groups: Array<Iterable<ImportRun> | null | undefined>) {
+  const byId = new Map<string, ImportRun>();
+  for (const group of groups) {
+    if (!group) {
+      continue;
+    }
+    for (const run of group) {
+      byId.set(run.id, run);
+    }
+  }
+  return [...byId.values()].sort((left, right) => {
+    const started = right.started_at.localeCompare(left.started_at);
+    if (started !== 0) {
+      return started;
+    }
+    return right.id.localeCompare(left.id);
+  });
+}
+
+export function latestDedicatedImport(runs: ImportRun[], campaignId: number, replyType: ReplyType) {
+  return runs.find((run) => importRunIsDedicatedSlice(run, campaignId, replyType)) ?? null;
+}
+
+export function dedicatedImportLeadCount(run: ImportRun | null, fallback = 0) {
+  if (!run) {
+    return fallback;
+  }
+  if (run.status === "succeeded" || run.status === "partial" || importRunIsActive(run.status)) {
+    return run.leads_processed;
+  }
+  return fallback;
+}
+
+export function anyImportRunIsActive(runs: ImportRun[]) {
+  return runs.some((run) => importRunIsActive(run.status));
 }
 
 export function importStatusLabel(status: string) {
