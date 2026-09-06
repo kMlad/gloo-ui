@@ -9,11 +9,15 @@ import { Checkbox } from "@/ui/components/ui/checkbox";
 import { DrawerFooter } from "@/ui/components/ui/drawer";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { Input } from "@/ui/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { SquareLock01Icon, UnfoldMoreIcon } from "@hugeicons/core-free-icons";
-
-const nativeSelectClass =
-  "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30";
+import { SquareLock01Icon } from "@hugeicons/core-free-icons";
 
 export type EmailValidationColumnFormProps = {
   columns: ColumnResponse[];
@@ -95,34 +99,36 @@ export function EmailValidationColumnForm({
           />
         </Field>
         <Field>
-          <FieldLabel htmlFor={`${idPrefix}-email-column`} className="text-xs text-muted-foreground">
+          <FieldLabel
+            htmlFor={`${idPrefix}-email-column`}
+            className="text-xs text-muted-foreground"
+          >
             Email column
           </FieldLabel>
-          <div className="relative">
-            <select
-              id={`${idPrefix}-email-column`}
-              value={emailColumnId}
-              disabled={pending || !hasTextColumn}
-              onChange={(event) => setEmailColumnId(event.target.value)}
-              className={`${nativeSelectClass} w-full`}
-            >
-              <option value="">Select a text column</option>
+          <Select
+            value={emailColumnId || null}
+            disabled={pending || !hasTextColumn}
+            onValueChange={(value) => setEmailColumnId(value ?? "")}
+          >
+            <SelectTrigger id={`${idPrefix}-email-column`} size="lg" className="w-full">
+              <SelectValue placeholder="Select a text column" />
+            </SelectTrigger>
+            <SelectContent>
               {textColumns.map((column) => (
-                <option key={column.id} value={column.id}>
+                <SelectItem key={column.id} value={column.id}>
                   {column.name}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <HugeiconsIcon
-              icon={UnfoldMoreIcon}
-              strokeWidth={2}
-              className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-          </div>
+            </SelectContent>
+          </Select>
           {hasTextColumn ? (
-            <FieldDescription>MillionVerifier will check the address in this column.</FieldDescription>
+            <FieldDescription>
+              MillionVerifier will check the address in this column.
+            </FieldDescription>
           ) : (
-            <FieldDescription>Add a text column with emails before creating this validation.</FieldDescription>
+            <FieldDescription>
+              Add a text column with emails before creating this validation.
+            </FieldDescription>
           )}
         </Field>
         <div className="flex flex-col gap-2">
@@ -148,7 +154,9 @@ export function EmailValidationColumnForm({
                 }
               }}
             />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">Treat catch-all as valid</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              Treat catch-all as valid
+            </span>
           </div>
           <FieldDescription>
             Catch-all domains are invalid unless this is on. Changing it later reclassifies existing

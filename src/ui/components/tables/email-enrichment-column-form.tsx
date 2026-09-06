@@ -14,16 +14,15 @@ import { Checkbox } from "@/ui/components/ui/checkbox";
 import { DrawerFooter } from "@/ui/components/ui/drawer";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { Input } from "@/ui/components/ui/input";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  ArrowDown01Icon,
-  ArrowUp01Icon,
-  SquareLock01Icon,
-  UnfoldMoreIcon,
-} from "@hugeicons/core-free-icons";
-
-const nativeSelectClass =
-  "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon, ArrowUp01Icon, SquareLock01Icon } from "@hugeicons/core-free-icons";
 
 type ProviderDraft = {
   id: EmailProvider;
@@ -107,8 +106,12 @@ export function EmailEnrichmentColumnForm({
 }: EmailEnrichmentColumnFormProps) {
   const excluded = useMemo(() => new Set(excludeColumnIds), [excludeColumnIds]);
   const [name, setName] = useState(initialName);
-  const [providers, setProviders] = useState<ProviderDraft[]>(() => providersFromConfig(initialConfig));
-  const [emailMappings, setEmailMappings] = useState<EmailMappings>(() => mappingsFromConfig(initialConfig));
+  const [providers, setProviders] = useState<ProviderDraft[]>(() =>
+    providersFromConfig(initialConfig),
+  );
+  const [emailMappings, setEmailMappings] = useState<EmailMappings>(() =>
+    mappingsFromConfig(initialConfig),
+  );
   const [acceptCatchall, setAcceptCatchall] = useState(initialConfig?.accept_catchall ?? false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -121,7 +124,9 @@ export function EmailEnrichmentColumnForm({
 
   function toggleProvider(id: EmailProvider, enabled: boolean) {
     setProviders((current) => {
-      const next = current.map((provider) => (provider.id === id ? { ...provider, enabled } : provider));
+      const next = current.map((provider) =>
+        provider.id === id ? { ...provider, enabled } : provider,
+      );
       if (!next.some((provider) => provider.enabled)) {
         return current;
       }
@@ -263,7 +268,9 @@ export function EmailEnrichmentColumnForm({
                 }
               }}
             />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">Treat catch-all as valid</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              Treat catch-all as valid
+            </span>
             {acceptCatchallLocked ? (
               <HugeiconsIcon
                 icon={SquareLock01Icon}
@@ -282,25 +289,28 @@ export function EmailEnrichmentColumnForm({
           <p className="text-xs text-muted-foreground">Input columns</p>
           {EMAIL_INPUT_FIELDS.map((field) => (
             <Field key={field.key}>
-              <FieldLabel htmlFor={`${idPrefix}-${field.key}`} className="text-xs text-muted-foreground">
+              <FieldLabel
+                htmlFor={`${idPrefix}-${field.key}`}
+                className="text-xs text-muted-foreground"
+              >
                 {field.label}
               </FieldLabel>
-              <div className="relative">
-                <select
-                  id={`${idPrefix}-${field.key}`}
-                  value={emailMappings[field.key]}
-                  disabled={pending || !hasEnoughTextColumns}
-                  onChange={(event) =>
-                    setEmailMappings((current) => ({
-                      ...current,
-                      [field.key]: event.target.value,
-                    }))
-                  }
-                  className={`${nativeSelectClass} w-full`}
-                >
-                  <option value="">Select a text column</option>
+              <Select
+                value={emailMappings[field.key] || null}
+                disabled={pending || !hasEnoughTextColumns}
+                onValueChange={(value) =>
+                  setEmailMappings((current) => ({
+                    ...current,
+                    [field.key]: value ?? "",
+                  }))
+                }
+              >
+                <SelectTrigger id={`${idPrefix}-${field.key}`} size="lg" className="w-full">
+                  <SelectValue placeholder="Select a text column" />
+                </SelectTrigger>
+                <SelectContent>
                   {textColumns.map((column) => (
-                    <option
+                    <SelectItem
                       key={column.id}
                       value={column.id}
                       disabled={
@@ -309,15 +319,10 @@ export function EmailEnrichmentColumnForm({
                       }
                     >
                       {column.name}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
-                <HugeiconsIcon
-                  icon={UnfoldMoreIcon}
-                  strokeWidth={2}
-                  className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-              </div>
+                </SelectContent>
+              </Select>
             </Field>
           ))}
           {hasEnoughTextColumns ? (
@@ -334,7 +339,10 @@ export function EmailEnrichmentColumnForm({
         <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={pending || !hasEnoughTextColumns || enabledProviderCount === 0}>
+        <Button
+          type="submit"
+          disabled={pending || !hasEnoughTextColumns || enabledProviderCount === 0}
+        >
           {pending ? pendingLabel : submitLabel}
         </Button>
       </DrawerFooter>

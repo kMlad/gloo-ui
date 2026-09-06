@@ -19,7 +19,12 @@ import {
   type LeadReply,
   type LeadStatus,
 } from "@/lib/leads";
-import { omitLeadingSubject, parseMessageBody, type MessageBlock, type MessageInline } from "@/lib/message-body";
+import {
+  omitLeadingSubject,
+  parseMessageBody,
+  type MessageBlock,
+  type MessageInline,
+} from "@/lib/message-body";
 import { mutationErrorMessage } from "@/lib/tables";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/components/ui/button";
@@ -31,18 +36,16 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/ui/components/ui/drawer";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Call02Icon,
-  Cancel01Icon,
-  LinkSquare02Icon,
-  Mail01Icon,
-  UnfoldMoreIcon,
-} from "@hugeicons/core-free-icons";
-
-const nativeSelectClass =
-  "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
+import { Call02Icon, Cancel01Icon, LinkSquare02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 
 const textareaClass =
   "min-h-24 w-full resize-y rounded-lg border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
@@ -58,12 +61,7 @@ type ThreadMessage = LeadReply & {
   conversation: LeadConversation;
 };
 
-export function LeadDetailDrawer({
-  open,
-  onOpenChange,
-  leadId,
-  summary,
-}: LeadDetailDrawerProps) {
+export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDetailDrawerProps) {
   const detailQuery = useQuery({
     queryKey: leadKeys.detail(leadId ?? ""),
     queryFn: ({ signal }) => getLead(leadId ?? "", signal),
@@ -250,9 +248,7 @@ function ThreadMessageItem({
     <li
       className={cn(
         "flex min-w-0 flex-col gap-1 rounded-lg px-3 py-2.5",
-        outbound
-          ? "ml-6 bg-muted/40"
-          : "mr-6 border border-border/70 bg-background",
+        outbound ? "ml-6 bg-muted/40" : "mr-6 border border-border/70 bg-background",
       )}
     >
       <div className="flex items-baseline justify-between gap-2">
@@ -260,14 +256,15 @@ function ThreadMessageItem({
           {outbound ? "Sent" : "Received"}
         </p>
         {time ? (
-          <time className="shrink-0 text-[0.65rem] text-muted-foreground" dateTime={message.received_at ?? undefined}>
+          <time
+            className="shrink-0 text-[0.65rem] text-muted-foreground"
+            dateTime={message.received_at ?? undefined}
+          >
             {time}
           </time>
         ) : null}
       </div>
-      {sender ? (
-        <p className="truncate text-[0.65rem] text-muted-foreground">{sender}</p>
-      ) : null}
+      {sender ? <p className="truncate text-[0.65rem] text-muted-foreground">{sender}</p> : null}
       {showSubject ? (
         <div className="mt-1 border-b border-border/70 pb-2.5" aria-label={`Subject: ${subject}`}>
           <p className="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">
@@ -292,11 +289,7 @@ function MessageBody({ blocks }: { blocks: MessageBlock[] }) {
     <div className="flex min-w-0 flex-col gap-2 text-sm text-foreground/90">
       {blocks.map((block, index) =>
         block.type === "list" ? (
-          <ListBlock
-            key={index}
-            ordered={block.ordered}
-            items={block.items}
-          />
+          <ListBlock key={index} ordered={block.ordered} items={block.items} />
         ) : (
           <p key={index} className="min-w-0 whitespace-pre-wrap">
             <InlineSpans spans={block.spans} />
@@ -307,13 +300,7 @@ function MessageBody({ blocks }: { blocks: MessageBlock[] }) {
   );
 }
 
-function ListBlock({
-  ordered,
-  items,
-}: {
-  ordered: boolean;
-  items: MessageInline[][];
-}) {
+function ListBlock({ ordered, items }: { ordered: boolean; items: MessageInline[][] }) {
   const ListTag = ordered ? "ol" : "ul";
   return (
     <ListTag
@@ -386,21 +373,13 @@ function IconField({
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </h3>
+      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</h3>
       {children}
     </section>
   );
 }
 
-function LeadStatusField({
-  leadId,
-  status,
-}: {
-  leadId: string;
-  status: LeadStatus;
-}) {
+function LeadStatusField({ leadId, status }: { leadId: string; status: LeadStatus }) {
   const queryClient = useQueryClient();
   const save = useMutation({
     mutationFn: (next: LeadStatus) => updateLead(leadId, { status: next }),
@@ -413,41 +392,37 @@ function LeadStatusField({
 
   return (
     <Section label="Status">
-      <div className="relative">
+      <div>
         <label htmlFor="lead-detail-status" className="sr-only">
           Lead status
         </label>
-        <select
-          id="lead-detail-status"
-          className={cn(nativeSelectClass, "w-full")}
+        <Select
           value={status}
           disabled={save.isPending}
-          onChange={(event) => save.mutate(event.target.value as LeadStatus)}
+          onValueChange={(value) => {
+            if (value) {
+              save.mutate(value);
+            }
+          }}
         >
-          {LEAD_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {LEAD_STATUS_LABELS[value]}
-            </option>
-          ))}
-        </select>
-        <HugeiconsIcon
-          icon={UnfoldMoreIcon}
-          strokeWidth={2}
-          className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-        />
+          <SelectTrigger id="lead-detail-status" size="lg" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {LEAD_STATUSES.map((value) => (
+              <SelectItem key={value} value={value}>
+                {LEAD_STATUS_LABELS[value]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </Section>
   );
 }
 
-function LeadNotesSection({
-  leadId,
-  notes,
-}: {
-  leadId: string;
-  notes: string | null | undefined;
-}) {
+function LeadNotesSection({ leadId, notes }: { leadId: string; notes: string | null | undefined }) {
   const queryClient = useQueryClient();
   const saved = notes ?? "";
   const [draft, setDraft] = useState(saved);
@@ -481,7 +456,12 @@ function LeadNotesSection({
       />
       <div className="flex items-center justify-end gap-2">
         {error ? <p className="mr-auto text-xs text-destructive">{error}</p> : null}
-        <Button type="button" size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate()}
+        >
           {save.isPending ? "Saving..." : "Save"}
         </Button>
       </div>
@@ -506,7 +486,9 @@ function PropertySection({
         {entries.map(([key, value]) => (
           <div key={key} className="flex items-baseline justify-between gap-3">
             <dt className="shrink-0 text-xs text-muted-foreground">{key}</dt>
-            <dd className="min-w-0 truncate text-sm text-foreground">{formatPropertyValue(value)}</dd>
+            <dd className="min-w-0 truncate text-sm text-foreground">
+              {formatPropertyValue(value)}
+            </dd>
           </div>
         ))}
       </dl>

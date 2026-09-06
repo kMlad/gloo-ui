@@ -26,11 +26,15 @@ import { Checkbox } from "@/ui/components/ui/checkbox";
 import { DrawerFooter } from "@/ui/components/ui/drawer";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { Input } from "@/ui/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Add01Icon, Cancel01Icon, UnfoldMoreIcon } from "@hugeicons/core-free-icons";
-
-const nativeSelectClass =
-  "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30";
+import { Add01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
 
 const textareaClass =
   "min-h-40 w-full resize-y rounded-lg border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
@@ -88,7 +92,10 @@ function optionalWebSearchLimit(raw: string, enabled: boolean): number | undefin
   return Number(trimmed);
 }
 
-function promptFromConfig(config: SheriffConfig | null): { prompt: string; sourcePrompt: string | null } {
+function promptFromConfig(config: SheriffConfig | null): {
+  prompt: string;
+  sourcePrompt: string | null;
+} {
   if (!config) {
     return { prompt: "", sourcePrompt: null };
   }
@@ -136,8 +143,12 @@ export function SheriffColumnForm({
   const [prompt, setPrompt] = useState(initialPrompt.prompt);
   const [sourcePrompt, setSourcePrompt] = useState<string | null>(initialPrompt.sourcePrompt);
   const [outputs, setOutputs] = useState<DraftOutput[]>(() => outputsFromConfig(initialConfig));
-  const [webSearch, setWebSearch] = useState(initialConfig?.web_search ?? DEFAULT_SHERIFF_WEB_SEARCH);
-  const [webSearchLimit, setWebSearchLimit] = useState(() => webSearchLimitFromConfig(initialConfig));
+  const [webSearch, setWebSearch] = useState(
+    initialConfig?.web_search ?? DEFAULT_SHERIFF_WEB_SEARCH,
+  );
+  const [webSearchLimit, setWebSearchLimit] = useState(() =>
+    webSearchLimitFromConfig(initialConfig),
+  );
   const [model, setModel] = useState<SheriffModel>(initialConfig?.model ?? DEFAULT_SHERIFF_MODEL);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [mention, setMention] = useState<SlashMention | null>(null);
@@ -168,7 +179,8 @@ export function SheriffColumnForm({
 
   const excluded = useMemo(() => new Set(excludeColumnIds), [excludeColumnIds]);
   const mentionableColumns = useMemo(
-    () => columns.filter((column) => !isComputedColumnType(column.type) && !excluded.has(column.id)),
+    () =>
+      columns.filter((column) => !isComputedColumnType(column.type) && !excluded.has(column.id)),
     [columns, excluded],
   );
   const mentionMatches = useMemo(() => {
@@ -183,7 +195,9 @@ export function SheriffColumnForm({
   }, [mention, mentionableColumns]);
   const modelOptions = useMemo(() => {
     const source = options.data?.models?.length ? options.data.models : [...SHERIFF_MODELS];
-    const listed = source.filter((value): value is SheriffModel => sheriffModelSchema.safeParse(value).success);
+    const listed = source.filter(
+      (value): value is SheriffModel => sheriffModelSchema.safeParse(value).success,
+    );
     const unique = [...new Set(listed)];
     if (!unique.includes(model)) {
       return [model, ...unique];
@@ -353,8 +367,12 @@ export function SheriffColumnForm({
                 syncMention(event.target.value, event.target.selectionStart);
               }}
               onKeyDown={handlePromptKeyDown}
-              onKeyUp={(event) => syncMention(event.currentTarget.value, event.currentTarget.selectionStart)}
-              onClick={(event) => syncMention(event.currentTarget.value, event.currentTarget.selectionStart)}
+              onKeyUp={(event) =>
+                syncMention(event.currentTarget.value, event.currentTarget.selectionStart)
+              }
+              onClick={(event) =>
+                syncMention(event.currentTarget.value, event.currentTarget.selectionStart)
+              }
               placeholder="Find the CEO of {{Company}}"
               required
               className={textareaClass}
@@ -394,33 +412,29 @@ export function SheriffColumnForm({
           <FieldLabel htmlFor={`${idPrefix}-model`} className="text-xs text-muted-foreground">
             Model
           </FieldLabel>
-          <div className="relative">
-            <select
-              id={`${idPrefix}-model`}
-              value={model}
-              disabled={pending}
-              onChange={(event) => {
-                const parsed = sheriffModelSchema.safeParse(event.target.value);
-                if (!parsed.success) {
-                  return;
-                }
-                modelTouched.current = true;
-                setModel(parsed.data);
-              }}
-              className={`${nativeSelectClass} w-full`}
-            >
+          <Select
+            value={model}
+            disabled={pending}
+            onValueChange={(value) => {
+              const parsed = sheriffModelSchema.safeParse(value);
+              if (!parsed.success) {
+                return;
+              }
+              modelTouched.current = true;
+              setModel(parsed.data);
+            }}
+          >
+            <SelectTrigger id={`${idPrefix}-model`} size="lg" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
               {modelOptions.map((value) => (
-                <option key={value} value={value}>
+                <SelectItem key={value} value={value}>
                   {sheriffModelLabel(value)}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <HugeiconsIcon
-              icon={UnfoldMoreIcon}
-              strokeWidth={2}
-              className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-          </div>
+            </SelectContent>
+          </Select>
           <FieldDescription>Used for this column's research runs.</FieldDescription>
         </Field>
         <div className="flex flex-col gap-2">
@@ -443,7 +457,10 @@ export function SheriffColumnForm({
             When on, Sheriff can look up sources on the web. Turn off to answer from the model only.
           </FieldDescription>
           <Field>
-            <FieldLabel htmlFor={`${idPrefix}-web-search-limit`} className="text-xs text-muted-foreground">
+            <FieldLabel
+              htmlFor={`${idPrefix}-web-search-limit`}
+              className="text-xs text-muted-foreground"
+            >
               Search limit
             </FieldLabel>
             <Input
@@ -460,8 +477,8 @@ export function SheriffColumnForm({
               className="h-9 rounded-lg px-3 text-sm"
             />
             <FieldDescription>
-              Caps web searches per row ({SHERIFF_WEB_SEARCH_LIMIT_MIN}–{SHERIFF_WEB_SEARCH_LIMIT_MAX}).
-              Leave empty to omit a limit.
+              Caps web searches per row ({SHERIFF_WEB_SEARCH_LIMIT_MIN}–
+              {SHERIFF_WEB_SEARCH_LIMIT_MAX}). Leave empty to omit a limit.
             </FieldDescription>
           </Field>
         </div>
@@ -494,38 +511,40 @@ export function SheriffColumnForm({
                 placeholder="first_name"
                 className="h-9 rounded-lg px-3 text-sm"
               />
-              <div className="relative shrink-0">
-                <select
-                  value={field.type}
-                  disabled={pending || field.locked}
-                  onChange={(event) => {
-                    const parsed = primitiveColumnTypeSchema.safeParse(event.target.value);
-                    if (!parsed.success) {
-                      return;
-                    }
-                    setOutputs((current) =>
-                      current.map((entry) =>
-                        entry.id === field.id ? { ...entry, type: parsed.data } : entry,
-                      ),
-                    );
-                  }}
-                  className={`${nativeSelectClass} w-28`}
-                >
-                  <option value="text">Text</option>
-                  <option value="boolean">Boolean</option>
-                </select>
-                <HugeiconsIcon
-                  icon={UnfoldMoreIcon}
-                  strokeWidth={2}
-                  className="pointer-events-none absolute top-1/2 right-2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                />
-              </div>
+              <Select
+                value={field.type}
+                disabled={pending || field.locked}
+                onValueChange={(value) => {
+                  const parsed = primitiveColumnTypeSchema.safeParse(value);
+                  if (!parsed.success) {
+                    return;
+                  }
+                  setOutputs((current) =>
+                    current.map((entry) =>
+                      entry.id === field.id ? { ...entry, type: parsed.data } : entry,
+                    ),
+                  );
+                }}
+              >
+                <SelectTrigger size="lg" className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="boolean">Boolean</SelectItem>
+                </SelectContent>
+              </Select>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Remove output"
-                disabled={outputs.length === 1 || pending || field.locked || lockedOutputCount === outputs.length}
+                disabled={
+                  outputs.length === 1 ||
+                  pending ||
+                  field.locked ||
+                  lockedOutputCount === outputs.length
+                }
                 onClick={() =>
                   setOutputs((current) => current.filter((entry) => entry.id !== field.id))
                 }

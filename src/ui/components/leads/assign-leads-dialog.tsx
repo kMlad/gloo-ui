@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { cn } from "@/lib/utils";
 import { type SdrListItem } from "@/lib/sdrs";
 import { Button } from "@/ui/components/ui/button";
 import {
@@ -11,11 +10,13 @@ import {
   DialogTitle,
 } from "@/ui/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
-
-const nativeSelectClass =
-  "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 
 type AssignLeadsDialogProps = {
   open: boolean;
@@ -90,28 +91,23 @@ export function AssignLeadsDialog({
                   No SDR users to assign. Invite an SDR first.
                 </p>
               ) : (
-                <div className="relative">
-                  <select
-                    id="assign-sdr"
-                    className={cn(nativeSelectClass, "w-full")}
-                    value={sdrId}
-                    disabled={isPending}
-                    onChange={(event) => setSdrId(event.target.value)}
-                    required
-                  >
-                    <option value="">Select an SDR</option>
+                <Select
+                  value={sdrId || null}
+                  onValueChange={(value) => setSdrId(value ?? "")}
+                  disabled={isPending}
+                  required
+                >
+                  <SelectTrigger id="assign-sdr" size="lg" className="w-full">
+                    <SelectValue placeholder="Select an SDR" />
+                  </SelectTrigger>
+                  <SelectContent>
                     {sdrs.map((sdr) => (
-                      <option key={sdr.id} value={sdr.id}>
+                      <SelectItem key={sdr.id} value={sdr.id}>
                         {sdr.email}
-                      </option>
+                      </SelectItem>
                     ))}
-                  </select>
-                  <HugeiconsIcon
-                    icon={UnfoldMoreIcon}
-                    strokeWidth={2}
-                    className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                  />
-                </div>
+                  </SelectContent>
+                </Select>
               )}
             </Field>
           </FieldGroup>

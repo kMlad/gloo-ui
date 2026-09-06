@@ -21,6 +21,13 @@ import { Input } from "@/ui/components/ui/input";
 import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, FilterIcon, Tick02Icon } from "@hugeicons/core-free-icons";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 
 type TableFilterBarProps = {
   tableId: string;
@@ -29,12 +36,7 @@ type TableFilterBarProps = {
   onFiltersSaved?: () => void;
 };
 
-type EditorState =
-  | { mode: "new" }
-  | { mode: "edit"; index: number };
-
-const nativeSelectClass =
-  "h-7 appearance-none rounded-md border border-input bg-input/20 px-2 pr-6 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30";
+type EditorState = { mode: "new" } | { mode: "edit"; index: number };
 
 export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: TableFilterBarProps) {
   const queryClient = useQueryClient();
@@ -69,9 +71,7 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
   }
 
   function setFilterLogic(index: number, logic: FilterLogic) {
-    persist(
-      filters.map((filter, current) => (current === index ? { ...filter, logic } : filter)),
-    );
+    persist(filters.map((filter, current) => (current === index ? { ...filter, logic } : filter)));
   }
 
   return (
@@ -108,7 +108,10 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
           const column = columnsById.get(filter.column_id);
           const valueLabel = formatFilterValue(filter);
           return (
-            <span key={`${filter.column_id}-${index}`} className="inline-flex shrink-0 items-center">
+            <span
+              key={`${filter.column_id}-${index}`}
+              className="inline-flex shrink-0 items-center"
+            >
               {index > 0 ? (
                 <FilterLogicToggle
                   value={normalizeFilterLogic(filter.logic)}
@@ -122,8 +125,12 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
                   className="inline-flex max-w-72 items-center gap-1 rounded-l-full py-0.5 pr-1 pl-2.5 text-left text-xs hover:bg-muted/80"
                   onClick={() => setEditor({ mode: "edit", index })}
                 >
-                  <span className="truncate font-medium text-foreground">{column?.name ?? "Unknown column"}</span>
-                  <span className="shrink-0 text-muted-foreground">{filterOperatorLabel(filter.operator)}</span>
+                  <span className="truncate font-medium text-foreground">
+                    {column?.name ?? "Unknown column"}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground">
+                    {filterOperatorLabel(filter.operator)}
+                  </span>
                   {valueLabel ? (
                     <span className="truncate font-medium text-foreground">{valueLabel}</span>
                   ) : null}
@@ -156,10 +163,7 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
               disabled={save.isPending}
               onCancel={() => setEditor(null)}
               onSave={(next) =>
-                persist([
-                  ...filters,
-                  { ...next, logic: filters.length === 0 ? "and" : draftLogic },
-                ])
+                persist([...filters, { ...next, logic: filters.length === 0 ? "and" : draftLogic }])
               }
             />
           </span>
@@ -180,7 +184,13 @@ export function TableFilterBar({ tableId, columns, filters, onFiltersSaved }: Ta
         )}
 
         {filters.length > 0 && editor === null ? (
-          <Button type="button" variant="ghost" size="sm" disabled={save.isPending} onClick={() => persist([])}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={save.isPending}
+            onClick={() => persist([])}
+          >
             Clear
           </Button>
         ) : null}
@@ -227,7 +237,8 @@ type FilterEditorProps = {
 
 function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: FilterEditorProps) {
   const fallbackColumn = columns[0];
-  const initialColumn = columns.find((column) => column.id === initial?.column_id) ?? fallbackColumn;
+  const initialColumn =
+    columns.find((column) => column.id === initial?.column_id) ?? fallbackColumn;
   const [columnId, setColumnId] = useState(initialColumn?.id ?? "");
   const [operator, setOperator] = useState<FilterOperator>(
     initial?.operator ?? defaultOperator(initialColumn?.type ?? "text"),
@@ -298,48 +309,65 @@ function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: 
       <label className="sr-only" htmlFor="filter-column">
         Column
       </label>
-      <select
-        id="filter-column"
+      <Select
         value={column.id}
         disabled={disabled}
-        className={cn(nativeSelectClass, "max-w-40")}
-        onChange={(event) => applyColumnChange(event.target.value)}
+        onValueChange={(value) => {
+          if (value) {
+            applyColumnChange(value);
+          }
+        }}
       >
-        {columns.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.name}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger id="filter-column" className="max-w-40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {columns.map((item) => (
+            <SelectItem key={item.id} value={item.id}>
+              {item.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       <label className="sr-only" htmlFor="filter-operator">
         Operator
       </label>
-      <select
-        id="filter-operator"
+      <Select
         value={operator}
         disabled={disabled}
-        className={nativeSelectClass}
-        onChange={(event) => applyOperatorChange(event.target.value as FilterOperator)}
+        onValueChange={(value) => {
+          if (value) {
+            applyOperatorChange(value);
+          }
+        }}
       >
-        {operators.map((item) => (
-          <option key={item} value={item}>
-            {filterOperatorLabel(item)}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger id="filter-operator">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {operators.map((item) => (
+            <SelectItem key={item} value={item}>
+              {filterOperatorLabel(item)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {filterOperatorNeedsValue(operator) && column.type === "boolean" ? (
-        <select
-          aria-label="Value"
+        <Select
           value={booleanValue ? "true" : "false"}
           disabled={disabled}
-          className={nativeSelectClass}
-          onChange={(event) => setBooleanValue(event.target.value === "true")}
+          onValueChange={(value) => setBooleanValue(value === "true")}
         >
-          <option value="true">True</option>
-          <option value="false">False</option>
-        </select>
+          <SelectTrigger aria-label="Value">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="true">True</SelectItem>
+            <SelectItem value="false">False</SelectItem>
+          </SelectContent>
+        </Select>
       ) : null}
 
       {filterOperatorNeedsValue(operator) && column.type === "text" ? (
@@ -367,7 +395,14 @@ function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: 
         <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-3" />
         Apply
       </Button>
-      <Button type="button" variant="ghost" size="icon-sm" disabled={disabled} aria-label="Cancel" onClick={onCancel}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        disabled={disabled}
+        aria-label="Cancel"
+        onClick={onCancel}
+      >
         <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
       </Button>
       {error ? <p className="basis-full text-xs text-destructive">{error}</p> : null}

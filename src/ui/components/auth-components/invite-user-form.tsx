@@ -9,13 +9,19 @@ import { useAuth } from "@/providers/auth-context";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { Input } from "@/ui/components/ui/input";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 
 export function InviteUserForm({ className, ...props }: React.ComponentProps<"div">) {
   const { role: inviterRole } = useAuth();
   const invitableRoles = getInvitableRoles(inviterRole);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const invite = useMutation({
     mutationFn: inviteUser,
   });
@@ -47,13 +53,18 @@ export function InviteUserForm({ className, ...props }: React.ComponentProps<"di
     invite.mutate(parsed.data, {
       onSuccess: () => {
         form.reset();
+        setRole(null);
       },
     });
   }
 
   const error =
     validationError ??
-    (invite.error instanceof Error ? invite.error.message : invite.isError ? "Failed to send invite" : null);
+    (invite.error instanceof Error
+      ? invite.error.message
+      : invite.isError
+        ? "Failed to send invite"
+        : null);
   const message =
     invite.isSuccess && invite.variables ? `Invite sent to ${invite.variables.email}.` : null;
 
@@ -80,29 +91,18 @@ export function InviteUserForm({ className, ...props }: React.ComponentProps<"di
               <FieldLabel htmlFor="role" className="text-xs text-muted-foreground">
                 Role
               </FieldLabel>
-              <div className="relative">
-                <select
-                  id="role"
-                  name="role"
-                  required
-                  defaultValue=""
-                  className="h-9 w-full appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-                >
-                  <option value="" disabled>
-                    Select a role
-                  </option>
-                  {invitableRoles.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.label}
-                    </option>
+              <Select name="role" required value={role} onValueChange={setRole}>
+                <SelectTrigger id="role" size="lg" className="w-full">
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {invitableRoles.map((entry) => (
+                    <SelectItem key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </SelectItem>
                   ))}
-                </select>
-                <HugeiconsIcon
-                  icon={UnfoldMoreIcon}
-                  strokeWidth={2}
-                  className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-              </div>
+                </SelectContent>
+              </Select>
             </Field>
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
             {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}

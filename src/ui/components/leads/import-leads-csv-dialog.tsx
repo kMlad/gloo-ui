@@ -15,7 +15,6 @@ import {
   type LeadCsvPreview,
 } from "@/lib/leads";
 import { mutationErrorMessage } from "@/lib/tables";
-import { cn } from "@/lib/utils";
 import { Button } from "@/ui/components/ui/button";
 import { Checkbox } from "@/ui/components/ui/checkbox";
 import {
@@ -29,11 +28,13 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { Input } from "@/ui/components/ui/input";
 import { Separator } from "@/ui/components/ui/separator";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
-
-const nativeSelectClass =
-  "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 
 type ImportStep = "file" | "map" | "done";
 
@@ -245,26 +246,22 @@ export function ImportLeadsCsvDialog({ open, onOpenChange }: ImportLeadsCsvDialo
                           {field.label}
                           {field.id === "email" || field.id === "phone" ? " *" : ""}
                         </label>
-                        <div className="relative">
-                          <select
-                            id={`lead-map-${field.id}`}
-                            className={cn(nativeSelectClass, "w-full")}
-                            value={mapping[field.id] ?? ""}
-                            onChange={(event) => handleFieldChange(field.id, event.target.value)}
-                          >
-                            <option value="">Skip</option>
+                        <Select
+                          value={mapping[field.id] || null}
+                          onValueChange={(value) => handleFieldChange(field.id, value ?? "")}
+                        >
+                          <SelectTrigger id={`lead-map-${field.id}`} size="lg" className="w-full">
+                            <SelectValue placeholder="Skip" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={null}>Skip</SelectItem>
                             {preview.headers.map((header) => (
-                              <option key={header} value={header}>
+                              <SelectItem key={header} value={header}>
                                 {header}
-                              </option>
+                              </SelectItem>
                             ))}
-                          </select>
-                          <HugeiconsIcon
-                            icon={UnfoldMoreIcon}
-                            strokeWidth={2}
-                            className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                          />
-                        </div>
+                          </SelectContent>
+                        </Select>
                       </div>
                     ))}
                   </fieldset>

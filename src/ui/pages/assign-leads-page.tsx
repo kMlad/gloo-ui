@@ -17,22 +17,20 @@ import {
 import { campaignKeys, listCampaigns } from "@/lib/smartlead";
 import { listSdrs, sdrKeys } from "@/lib/sdrs";
 import { mutationErrorMessage } from "@/lib/tables";
-import { cn } from "@/lib/utils";
 import { AssignLeadsDialog } from "@/ui/components/leads/assign-leads-dialog";
 import { LeadDetailDrawer } from "@/ui/components/leads/lead-detail-drawer";
 import { LeadsList } from "@/ui/components/leads/leads-list";
 import { Button } from "@/ui/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  UnfoldMoreIcon,
-  UserCheck01Icon,
-} from "@hugeicons/core-free-icons";
-
-const nativeSelectClass =
-  "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30";
+import { ArrowLeft01Icon, ArrowRight01Icon, UserCheck01Icon } from "@hugeicons/core-free-icons";
 
 export function AssignLeadsPage() {
   const queryClient = useQueryClient();
@@ -101,16 +99,13 @@ export function AssignLeadsPage() {
   }, [campaigns]);
 
   const pageFullySelected =
-    items.length > 0 &&
-    (allMatching || items.every((lead) => selectedIds.includes(lead.id)));
+    items.length > 0 && (allMatching || items.every((lead) => selectedIds.includes(lead.id)));
   const selectedCount = allMatching ? total : selectedIds.length;
   const showSelectAllMatching = pageFullySelected && !allMatching && total > selectedIds.length;
 
   const assignMutation = useMutation({
     mutationFn: async (sdrId: string) => {
-      const leadIds = allMatching
-        ? await listAllLeadIds(filterParams)
-        : selectedIds;
+      const leadIds = allMatching ? await listAllLeadIds(filterParams) : selectedIds;
       if (leadIds.length === 0) {
         throw new Error("No leads selected");
       }
@@ -139,22 +134,22 @@ export function AssignLeadsPage() {
     setAllMatching(false);
   }
 
-  function handleReplyTypeChange(value: string) {
-    setReplyType(value === "" ? null : (value as ReplyType));
+  function handleReplyTypeChange(value: ReplyType | null) {
+    setReplyType(value);
     setOffset(0);
     clearSelection();
     setSuccessMessage(null);
   }
 
-  function handleStatusChange(value: string) {
-    setStatus(value === "" ? null : (value as LeadStatus));
+  function handleStatusChange(value: LeadStatus | null) {
+    setStatus(value);
     setOffset(0);
     clearSelection();
     setSuccessMessage(null);
   }
 
-  function handleCampaignChange(value: string) {
-    setCampaignId(value === "" ? null : Number(value));
+  function handleCampaignChange(value: number | null) {
+    setCampaignId(value);
     setOffset(0);
     clearSelection();
     setSuccessMessage(null);
@@ -164,7 +159,9 @@ export function AssignLeadsPage() {
     setSuccessMessage(null);
     if (allMatching) {
       setAllMatching(false);
-      setSelectedIds(items.map((lead) => lead.id).filter((id) => (selected ? true : id !== leadId)));
+      setSelectedIds(
+        items.map((lead) => lead.id).filter((id) => (selected ? true : id !== leadId)),
+      );
       return;
     }
     setSelectedIds((current) => {
@@ -201,83 +198,73 @@ export function AssignLeadsPage() {
     <div className="flex min-w-0 flex-1 flex-col gap-6 p-6 md:p-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex flex-col gap-1">
-          <h1 className="m-0 text-2xl font-semibold tracking-tight text-foreground">Assign leads</h1>
+          <h1 className="m-0 text-2xl font-semibold tracking-tight text-foreground">
+            Assign leads
+          </h1>
           <p className="text-sm text-muted-foreground">
             Unassigned SmartLead contacts. Select leads and assign them to an SDR.
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="relative w-full sm:w-auto">
+          <div className="w-full sm:w-auto">
             <label htmlFor="assign-lead-campaign" className="sr-only">
               Filter by campaign
             </label>
-            <select
-              id="assign-lead-campaign"
-              className={cn(nativeSelectClass, "w-full sm:max-w-56")}
-              value={campaignId ?? ""}
-              onChange={(event) => handleCampaignChange(event.target.value)}
-            >
-              <option value="">All campaigns</option>
-              {campaignOptions.map((campaign) => (
-                <option key={campaign.smartlead_campaign_id} value={campaign.smartlead_campaign_id}>
-                  {campaign.name}
-                </option>
-              ))}
-            </select>
-            <HugeiconsIcon
-              icon={UnfoldMoreIcon}
-              strokeWidth={2}
-              className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-            />
+            <Select value={campaignId} onValueChange={handleCampaignChange}>
+              <SelectTrigger
+                id="assign-lead-campaign"
+                size="lg"
+                className="w-full sm:max-w-56 sm:min-w-44"
+              >
+                <SelectValue placeholder="All campaigns" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={null}>All campaigns</SelectItem>
+                {campaignOptions.map((campaign) => (
+                  <SelectItem
+                    key={campaign.smartlead_campaign_id}
+                    value={campaign.smartlead_campaign_id}
+                  >
+                    {campaign.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="relative w-full sm:w-auto">
+          <div className="w-full sm:w-auto">
             <label htmlFor="assign-lead-status" className="sr-only">
               Filter by status
             </label>
-            <select
-              id="assign-lead-status"
-              className={cn(nativeSelectClass, "w-full sm:w-auto")}
-              value={status ?? ""}
-              onChange={(event) => handleStatusChange(event.target.value)}
-            >
-              <option value="">All statuses</option>
-              {LEAD_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {LEAD_STATUS_LABELS[value]}
-                </option>
-              ))}
-            </select>
-            <HugeiconsIcon
-              icon={UnfoldMoreIcon}
-              strokeWidth={2}
-              className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-            />
+            <Select value={status} onValueChange={handleStatusChange}>
+              <SelectTrigger id="assign-lead-status" size="lg" className="w-full sm:min-w-40">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={null}>All statuses</SelectItem>
+                {LEAD_STATUSES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {LEAD_STATUS_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="relative w-full sm:w-auto">
+          <div className="w-full sm:w-auto">
             <label htmlFor="assign-lead-reply-type" className="sr-only">
               Filter by reply type
             </label>
-            <select
-              id="assign-lead-reply-type"
-              className={cn(nativeSelectClass, "w-full sm:w-auto")}
-              value={replyType ?? ""}
-              onChange={(event) => handleReplyTypeChange(event.target.value)}
-            >
-              <option value="">All replies</option>
-              <option value="positive">{REPLY_TYPE_LABELS.positive}</option>
-              <option value="ooo">{REPLY_TYPE_LABELS.ooo}</option>
-            </select>
-            <HugeiconsIcon
-              icon={UnfoldMoreIcon}
-              strokeWidth={2}
-              className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-            />
+            <Select value={replyType} onValueChange={handleReplyTypeChange}>
+              <SelectTrigger id="assign-lead-reply-type" size="lg" className="w-full sm:min-w-36">
+                <SelectValue placeholder="All replies" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={null}>All replies</SelectItem>
+                <SelectItem value="positive">{REPLY_TYPE_LABELS.positive}</SelectItem>
+                <SelectItem value="ooo">{REPLY_TYPE_LABELS.ooo}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <Button
-            type="button"
-            disabled={selectedCount === 0}
-            onClick={() => setDialogOpen(true)}
-          >
+          <Button type="button" disabled={selectedCount === 0} onClick={() => setDialogOpen(true)}>
             <HugeiconsIcon icon={UserCheck01Icon} strokeWidth={2} />
             {selectedCount > 0
               ? `Assign ${selectedCount} lead${selectedCount === 1 ? "" : "s"}`
@@ -307,9 +294,7 @@ export function AssignLeadsPage() {
             </>
           ) : (
             <>
-              <p className="text-foreground">
-                All {items.length} leads on this page are selected.
-              </p>
+              <p className="text-foreground">All {items.length} leads on this page are selected.</p>
               <Button type="button" variant="ghost" size="sm" onClick={() => setAllMatching(true)}>
                 Select all {total} matching leads
               </Button>

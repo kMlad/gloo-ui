@@ -14,23 +14,21 @@ import {
 import { canAssignLeads, canImportLeads } from "@/lib/roles";
 import { listSdrs, sdrEmailById, sdrKeys } from "@/lib/sdrs";
 import { mutationErrorMessage } from "@/lib/tables";
-import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-context";
 import { LeadDetailDrawer } from "@/ui/components/leads/lead-detail-drawer";
 import { ImportLeadsCsvDialog } from "@/ui/components/leads/import-leads-csv-dialog";
 import { LeadsList } from "@/ui/components/leads/leads-list";
 import { Button } from "@/ui/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  UnfoldMoreIcon,
-  Upload01Icon,
-} from "@hugeicons/core-free-icons";
-
-const nativeSelectClass =
-  "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30";
+import { ArrowLeft01Icon, ArrowRight01Icon, Upload01Icon } from "@hugeicons/core-free-icons";
 
 export function LeadsPage() {
   const { role } = useAuth();
@@ -79,13 +77,13 @@ export function LeadsPage() {
     leadsQuery.isError ? "Failed to load leads" : "",
   );
 
-  function handleReplyTypeChange(value: string) {
-    setReplyType(value === "" ? null : (value as ReplyType));
+  function handleReplyTypeChange(value: ReplyType | null) {
+    setReplyType(value);
     setOffset(0);
   }
 
-  function handleStatusChange(value: string) {
-    setStatus(value === "" ? null : (value as LeadStatus));
+  function handleStatusChange(value: LeadStatus | null) {
+    setStatus(value);
     setOffset(0);
   }
 
@@ -107,48 +105,38 @@ export function LeadsPage() {
               Import CSV
             </Button>
           ) : null}
-          <div className="relative w-full sm:w-auto">
+          <div className="w-full sm:w-auto">
             <label htmlFor="lead-status" className="sr-only">
               Filter by status
             </label>
-            <select
-              id="lead-status"
-              className={cn(nativeSelectClass, "w-full sm:w-auto")}
-              value={status ?? ""}
-              onChange={(event) => handleStatusChange(event.target.value)}
-            >
-              <option value="">All statuses</option>
-              {LEAD_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {LEAD_STATUS_LABELS[value]}
-                </option>
-              ))}
-            </select>
-            <HugeiconsIcon
-              icon={UnfoldMoreIcon}
-              strokeWidth={2}
-              className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-            />
+            <Select value={status} onValueChange={handleStatusChange}>
+              <SelectTrigger id="lead-status" size="lg" className="w-full sm:min-w-40">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={null}>All statuses</SelectItem>
+                {LEAD_STATUSES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {LEAD_STATUS_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="relative w-full sm:w-auto">
+          <div className="w-full sm:w-auto">
             <label htmlFor="lead-reply-type" className="sr-only">
               Filter by reply type
             </label>
-            <select
-              id="lead-reply-type"
-              className={cn(nativeSelectClass, "w-full sm:w-auto")}
-              value={replyType ?? ""}
-              onChange={(event) => handleReplyTypeChange(event.target.value)}
-            >
-              <option value="">All replies</option>
-              <option value="positive">{REPLY_TYPE_LABELS.positive}</option>
-              <option value="ooo">{REPLY_TYPE_LABELS.ooo}</option>
-            </select>
-            <HugeiconsIcon
-              icon={UnfoldMoreIcon}
-              strokeWidth={2}
-              className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-            />
+            <Select value={replyType} onValueChange={handleReplyTypeChange}>
+              <SelectTrigger id="lead-reply-type" size="lg" className="w-full sm:min-w-36">
+                <SelectValue placeholder="All replies" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={null}>All replies</SelectItem>
+                <SelectItem value="positive">{REPLY_TYPE_LABELS.positive}</SelectItem>
+                <SelectItem value="ooo">{REPLY_TYPE_LABELS.ooo}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>

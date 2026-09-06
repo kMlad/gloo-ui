@@ -19,8 +19,15 @@ import {
 } from "@/ui/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/ui/components/ui/field";
 import { Input } from "@/ui/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/components/ui/select";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Add01Icon, Cancel01Icon, UnfoldMoreIcon } from "@hugeicons/core-free-icons";
+import { Add01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
 
 type DraftColumn = {
   key: string;
@@ -91,7 +98,9 @@ export function CreateTableDialog({ open, onOpenChange, onCreated }: CreateTable
     create.mutate(parsed.data);
   }
 
-  const error = validationError ?? mutationErrorMessage(create.error, create.isError ? "Failed to create table" : "");
+  const error =
+    validationError ??
+    mutationErrorMessage(create.error, create.isError ? "Failed to create table" : "");
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -124,7 +133,10 @@ export function CreateTableDialog({ open, onOpenChange, onCreated }: CreateTable
                   variant="ghost"
                   size="sm"
                   onClick={() =>
-                    setColumns((current) => [...current, { key: nextKey(), name: "", type: "text" }])
+                    setColumns((current) => [
+                      ...current,
+                      { key: nextKey(), name: "", type: "text" },
+                    ])
                   }
                 >
                   <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
@@ -145,31 +157,28 @@ export function CreateTableDialog({ open, onOpenChange, onCreated }: CreateTable
                     placeholder="Column name"
                     className="h-9 rounded-lg px-3 text-sm"
                   />
-                  <div className="relative shrink-0">
-                    <select
-                      value={column.type}
-                      onChange={(event) => {
-                        const parsed = primitiveColumnTypeSchema.safeParse(event.target.value);
-                        if (!parsed.success) {
-                          return;
-                        }
-                        setColumns((current) =>
-                          current.map((entry) =>
-                            entry.key === column.key ? { ...entry, type: parsed.data } : entry,
-                          ),
-                        );
-                      }}
-                      className="h-9 w-28 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-8 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
-                    >
-                      <option value="text">Text</option>
-                      <option value="boolean">Boolean</option>
-                    </select>
-                    <HugeiconsIcon
-                      icon={UnfoldMoreIcon}
-                      strokeWidth={2}
-                      className="pointer-events-none absolute top-1/2 right-2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                    />
-                  </div>
+                  <Select
+                    value={column.type}
+                    onValueChange={(value) => {
+                      const parsed = primitiveColumnTypeSchema.safeParse(value);
+                      if (!parsed.success) {
+                        return;
+                      }
+                      setColumns((current) =>
+                        current.map((entry) =>
+                          entry.key === column.key ? { ...entry, type: parsed.data } : entry,
+                        ),
+                      );
+                    }}
+                  >
+                    <SelectTrigger size="lg" className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">Text</SelectItem>
+                      <SelectItem value="boolean">Boolean</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button
                     type="button"
                     variant="ghost"
@@ -188,7 +197,12 @@ export function CreateTableDialog({ open, onOpenChange, onCreated }: CreateTable
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
           </FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={create.isPending} onClick={() => handleOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={create.isPending}
+              onClick={() => handleOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={create.isPending}>
