@@ -26,6 +26,14 @@ export const REPLY_TYPE_LABELS: Record<ReplyType, string> = {
   ooo: "OOO",
 };
 
+export const LEAD_PLATFORMS = ["smartlead", "heyreach"] as const;
+export const leadPlatformSchema = z.enum(LEAD_PLATFORMS);
+export type LeadPlatform = z.infer<typeof leadPlatformSchema>;
+export const LEAD_PLATFORM_LABELS: Record<LeadPlatform, string> = {
+  smartlead: "SmartLead",
+  heyreach: "HeyReach",
+};
+
 export const LEAD_STATUSES = [
   "new",
   "attempted",
@@ -171,7 +179,9 @@ export type ListLeadsParams = {
   offset?: number;
   replyType?: ReplyType | null;
   status?: LeadStatus | null;
+  platform?: LeadPlatform | null;
   campaignId?: number | null;
+  heyreachCampaignId?: number | null;
   assignmentStatus?: AssignmentStatus | null;
   signal?: AbortSignal;
 };
@@ -181,7 +191,9 @@ export type LeadListQueryParams = {
   offset: number;
   replyType: ReplyType | null;
   status: LeadStatus | null;
+  platform: LeadPlatform | null;
   campaignId: number | null;
+  heyreachCampaignId: number | null;
   assignmentStatus: AssignmentStatus | null;
 };
 
@@ -315,8 +327,14 @@ export function listLeads(params: ListLeadsParams = {}) {
   if (params.status) {
     search.set("status", params.status);
   }
-  if (params.campaignId != null) {
+  if (params.platform) {
+    search.set("platform", params.platform);
+  }
+  if (params.campaignId != null && params.platform !== "heyreach") {
     search.set("campaign_id", String(params.campaignId));
+  }
+  if (params.heyreachCampaignId != null && params.platform !== "smartlead") {
+    search.set("heyreach_campaign_id", String(params.heyreachCampaignId));
   }
   if (params.assignmentStatus) {
     search.set("assignment_status", params.assignmentStatus);

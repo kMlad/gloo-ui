@@ -2,12 +2,15 @@ import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   LEAD_PAGE_SIZE,
+  LEAD_PLATFORMS,
+  LEAD_PLATFORM_LABELS,
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
   leadKeys,
   listLeads,
   REPLY_TYPE_LABELS,
   type LeadListItem,
+  type LeadPlatform,
   type LeadStatus,
   type ReplyType,
 } from "@/lib/leads";
@@ -33,6 +36,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon, Upload01Icon } from "@hugeicons/core
 export function LeadsPage() {
   const { role } = useAuth();
   const [offset, setOffset] = useState(0);
+  const [platform, setPlatform] = useState<LeadPlatform | null>(null);
   const [replyType, setReplyType] = useState<ReplyType | null>(null);
   const [status, setStatus] = useState<LeadStatus | null>(null);
   const [selectedLead, setSelectedLead] = useState<LeadListItem | null>(null);
@@ -46,10 +50,12 @@ export function LeadsPage() {
       offset,
       replyType,
       status,
+      platform,
       campaignId: null,
+      heyreachCampaignId: null,
       assignmentStatus: null,
     }),
-    [offset, replyType, status],
+    [offset, replyType, status, platform],
   );
 
   const leadsQuery = useQuery({
@@ -77,6 +83,11 @@ export function LeadsPage() {
     leadsQuery.isError ? "Failed to load leads" : "",
   );
 
+  function handlePlatformChange(value: LeadPlatform | null) {
+    setPlatform(value);
+    setOffset(0);
+  }
+
   function handleReplyTypeChange(value: ReplyType | null) {
     setReplyType(value);
     setOffset(0);
@@ -87,7 +98,7 @@ export function LeadsPage() {
     setOffset(0);
   }
 
-  const hasFilters = Boolean(replyType || status);
+  const hasFilters = Boolean(platform || replyType || status);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6 p-6 md:p-8">
@@ -99,13 +110,31 @@ export function LeadsPage() {
             enrichment.
           </p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
           {showImport ? (
             <Button type="button" variant="outline" onClick={() => setImportOpen(true)}>
               <HugeiconsIcon icon={Upload01Icon} strokeWidth={2} />
               Import CSV
             </Button>
           ) : null}
+          <div className="w-full sm:w-auto">
+            <label htmlFor="lead-platform" className="sr-only">
+              Filter by platform
+            </label>
+            <Select value={platform} onValueChange={handlePlatformChange}>
+              <SelectTrigger id="lead-platform" size="lg" className="w-full sm:min-w-40">
+                <SelectValue placeholder="All platforms" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={null}>All platforms</SelectItem>
+                {LEAD_PLATFORMS.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {LEAD_PLATFORM_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="w-full sm:w-auto">
             <label htmlFor="lead-status" className="sr-only">
               Filter by status
@@ -157,7 +186,7 @@ export function LeadsPage() {
           </p>
           <p className="text-sm text-muted-foreground">
             {hasFilters
-              ? "Try another status or reply type, or import more leads."
+              ? "Try another platform, status, or reply type, or import more leads."
               : "Import a CSV or bring in SmartLead or HeyReach replies to get started."}
           </p>
           {showImport && !hasFilters ? (

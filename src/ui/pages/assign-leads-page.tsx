@@ -3,6 +3,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import {
   assignLeadsInChunks,
   LEAD_PAGE_SIZE,
+  LEAD_PLATFORMS,
+  LEAD_PLATFORM_LABELS,
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
   leadKeys,
@@ -11,9 +13,11 @@ import {
   REPLY_TYPE_LABELS,
   type LeadAssignmentResponse,
   type LeadListItem,
+  type LeadPlatform,
   type LeadStatus,
   type ReplyType,
 } from "@/lib/leads";
+import { heyreachCampaignKeys, listHeyReachCampaigns } from "@/lib/heyreach";
 import { campaignKeys, listCampaigns } from "@/lib/smartlead";
 import { listSdrs, sdrKeys } from "@/lib/sdrs";
 import { mutationErrorMessage } from "@/lib/tables";
@@ -24,7 +28,9 @@ import { Button } from "@/ui/components/ui/button";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/ui/components/ui/select";
@@ -32,12 +38,51 @@ import { Skeleton } from "@/ui/components/ui/skeleton";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowLeft01Icon, ArrowRight01Icon, UserCheck01Icon } from "@hugeicons/core-free-icons";
 
+function campaignFilterValue(
+  campaignId: number | null,
+  heyreachCampaignId: number | null,
+): string | null {
+  if (campaignId != null) {
+    return `smartlead:${campaignId}`;
+  }
+  if (heyreachCampaignId != null) {
+    return `heyreach:${heyreachCampaignId}`;
+  }
+  return null;
+}
+
+function parseCampaignFilterValue(value: string | null): {
+  campaignId: number | null;
+  heyreachCampaignId: number | null;
+} {
+  if (!value) {
+    return { campaignId: null, heyreachCampaignId: null };
+  }
+  if (value.startsWith("heyreach:")) {
+    const id = Number(value.slice("heyreach:".length));
+    return {
+      campaignId: null,
+      heyreachCampaignId: Number.isFinite(id) ? id : null,
+    };
+  }
+  if (value.startsWith("smartlead:")) {
+    const id = Number(value.slice("smartlead:".length));
+    return {
+      campaignId: Number.isFinite(id) ? id : null,
+      heyreachCampaignId: null,
+    };
+  }
+  return { campaignId: null, heyreachCampaignId: null };
+}
+
 export function AssignLeadsPage() {
   const queryClient = useQueryClient();
   const [offset, setOffset] = useState(0);
+  const [platform, setPlatform] = useState<LeadPlatform | null>(null);
   const [replyType, setReplyType] = useState<ReplyType | null>(null);
   const [status, setStatus] = useState<LeadStatus | null>(null);
   const [campaignId, setCampaignId] = useState<number | null>(null);
+  const [heyreachCampaignId, setHeyreachCampaignId] = useState<number | null>(null);
   const [selectedLead, setSelectedLead] = useState<LeadListItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [allMatching, setAllMatching] = useState(false);
@@ -50,20 +95,24 @@ export function AssignLeadsPage() {
       offset,
       replyType,
       status,
+      platform,
       campaignId,
+      heyreachCampaignId,
       assignmentStatus: "unassigned" as const,
     }),
-    [offset, replyType, status, campaignId],
+    [offset, replyType, status, platform, campaignId, heyreachCampaignId],
   );
 
   const filterParams = useMemo(
     () => ({
       replyType,
       status,
+      platform,
       campaignId,
+      heyreachCampaignId,
       assignmentStatus: "unassigned" as const,
     }),
-    [replyType, status, campaignId],
+    [replyType, status, platform, campaignId, heyreachCampaignId],
   );
 
   const leadsQuery = useQuery({
@@ -75,6 +124,11 @@ export function AssignLeadsPage() {
   const campaignsQuery = useQuery({
     queryKey: campaignKeys.all,
     queryFn: ({ signal }) => listCampaigns(signal),
+  });
+
+  const heyreachCampaignsQuery = useQuery({
+    queryKey: heyreachCampaignKeys.all,
+    queryFn: ({ signal }) => listHeyReachCampaigns(signal),
   });
 
   const sdrsQuery = useQuery({
@@ -94,9 +148,20 @@ export function AssignLeadsPage() {
   );
   const campaigns = campaignsQuery.data ?? [];
   const campaignOptions = useMemo(() => {
+    if (platform === "heyreach") {
+      return [];
+    }
     const imported = campaigns.filter((campaign) => campaign.ever_imported);
     return imported.length > 0 ? imported : campaigns;
-  }, [campaigns]);
+  }, [campaigns, platform]);
+  const heyreachCampaigns = heyreachCampaignsQuery.data ?? [];
+  const heyreachCampaignOptions = useMemo(() => {
+    if (platform === "smartlead") {
+      return [];
+    }
+    const imported = heyreachCampaigns.filter((campaign) => campaign.ever_imported);
+    return imported.length > 0 ? imported : heyreachCampaigns;
+  }, [heyreachCampaigns, platform]);
 
   const pageFullySelected =
     items.length > 0 && (allMatching || items.every((lead) => selectedIds.includes(lead.id)));
@@ -134,6 +199,18 @@ export function AssignLeadsPage() {
     setAllMatching(false);
   }
 
+  function handlePlatformChange(value: LeadPlatform | null) {
+    setPlatform(value);
+    if (value === "smartlead") {
+      setHeyreachCampaignId(null);
+    } else if (value === "heyreach") {
+      setCampaignId(null);
+    }
+    setOffset(0);
+    clearSelection();
+    setSuccessMessage(null);
+  }
+
   function handleReplyTypeChange(value: ReplyType | null) {
     setReplyType(value);
     setOffset(0);
@@ -148,8 +225,15 @@ export function AssignLeadsPage() {
     setSuccessMessage(null);
   }
 
-  function handleCampaignChange(value: number | null) {
-    setCampaignId(value);
+  function handleCampaignChange(value: string | null) {
+    const next = parseCampaignFilterValue(value);
+    setCampaignId(next.campaignId);
+    setHeyreachCampaignId(next.heyreachCampaignId);
+    if (next.heyreachCampaignId != null) {
+      setPlatform("heyreach");
+    } else if (next.campaignId != null) {
+      setPlatform("smartlead");
+    }
     setOffset(0);
     clearSelection();
     setSuccessMessage(null);
@@ -192,7 +276,7 @@ export function AssignLeadsPage() {
     });
   }
 
-  const hasFilters = Boolean(replyType || status || campaignId);
+  const hasFilters = Boolean(platform || replyType || status || campaignId || heyreachCampaignId);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6 p-6 md:p-8">
@@ -202,15 +286,37 @@ export function AssignLeadsPage() {
             Assign leads
           </h1>
           <p className="text-sm text-muted-foreground">
-            Unassigned SmartLead contacts. Select leads and assign them to an SDR.
+            Unassigned contacts from CSV imports, SmartLead, and HeyReach. Select leads and assign
+            them to an SDR.
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
           <div className="w-full sm:w-auto">
+            <label htmlFor="assign-lead-platform" className="sr-only">
+              Filter by platform
+            </label>
+            <Select value={platform} onValueChange={handlePlatformChange}>
+              <SelectTrigger id="assign-lead-platform" size="lg" className="w-full sm:min-w-40">
+                <SelectValue placeholder="All platforms" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={null}>All platforms</SelectItem>
+                {LEAD_PLATFORMS.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {LEAD_PLATFORM_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-full sm:w-auto">
             <label htmlFor="assign-lead-campaign" className="sr-only">
               Filter by campaign
             </label>
-            <Select value={campaignId} onValueChange={handleCampaignChange}>
+            <Select
+              value={campaignFilterValue(campaignId, heyreachCampaignId)}
+              onValueChange={handleCampaignChange}
+            >
               <SelectTrigger
                 id="assign-lead-campaign"
                 size="lg"
@@ -220,14 +326,32 @@ export function AssignLeadsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={null}>All campaigns</SelectItem>
-                {campaignOptions.map((campaign) => (
-                  <SelectItem
-                    key={campaign.smartlead_campaign_id}
-                    value={campaign.smartlead_campaign_id}
-                  >
-                    {campaign.name}
-                  </SelectItem>
-                ))}
+                {campaignOptions.length > 0 ? (
+                  <SelectGroup>
+                    {platform == null ? <SelectLabel>SmartLead</SelectLabel> : null}
+                    {campaignOptions.map((campaign) => (
+                      <SelectItem
+                        key={`smartlead:${campaign.smartlead_campaign_id}`}
+                        value={`smartlead:${campaign.smartlead_campaign_id}`}
+                      >
+                        {campaign.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ) : null}
+                {heyreachCampaignOptions.length > 0 ? (
+                  <SelectGroup>
+                    {platform == null ? <SelectLabel>HeyReach</SelectLabel> : null}
+                    {heyreachCampaignOptions.map((campaign) => (
+                      <SelectItem
+                        key={`heyreach:${campaign.heyreach_campaign_id}`}
+                        value={`heyreach:${campaign.heyreach_campaign_id}`}
+                      >
+                        {campaign.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ) : null}
               </SelectContent>
             </Select>
           </div>
@@ -273,9 +397,12 @@ export function AssignLeadsPage() {
         </div>
       </div>
 
-      {campaignsQuery.isError ? (
+      {campaignsQuery.isError || heyreachCampaignsQuery.isError ? (
         <p className="text-sm text-destructive">
-          {mutationErrorMessage(campaignsQuery.error, "Failed to load campaigns")}
+          {mutationErrorMessage(
+            campaignsQuery.error ?? heyreachCampaignsQuery.error,
+            "Failed to load campaigns",
+          )}
         </p>
       ) : null}
 
@@ -318,7 +445,7 @@ export function AssignLeadsPage() {
           </p>
           <p className="text-sm text-muted-foreground">
             {hasFilters
-              ? "Try another campaign, status, or reply type."
+              ? "Try another platform, campaign, status, or reply type."
               : "Imported leads that still need an SDR will show up here."}
           </p>
         </div>
