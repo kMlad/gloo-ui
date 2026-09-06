@@ -9,13 +9,9 @@ const invitePermissions = {
 
 export type AppRole = keyof typeof invitePermissions;
 
-export const INVITE_PERMISSIONS: Record<AppRole, readonly AppRole[]> =
-  invitePermissions;
+export const INVITE_PERMISSIONS: Record<AppRole, readonly AppRole[]> = invitePermissions;
 
-export const roleIds = Object.keys(INVITE_PERMISSIONS) as [
-  AppRole,
-  ...AppRole[],
-];
+export const roleIds = Object.keys(INVITE_PERMISSIONS) as [AppRole, ...AppRole[]];
 
 export const appRoleSchema = z.enum(roleIds);
 
@@ -48,4 +44,8 @@ export function canManageSmartlead(role: AppRole | null | undefined): boolean {
 
 export function canAssignLeads(role: AppRole | null | undefined): boolean {
   return role === "admin" || role === "sales_lead";
+}
+
+export function canImportLeads(role: AppRole | null | undefined): boolean {
+  return role === "admin" || role === "sales_lead" || role === "sdr";
 }

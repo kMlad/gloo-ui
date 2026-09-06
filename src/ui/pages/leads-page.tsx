@@ -11,17 +11,23 @@ import {
   type LeadStatus,
   type ReplyType,
 } from "@/lib/leads";
-import { canAssignLeads } from "@/lib/roles";
+import { canAssignLeads, canImportLeads } from "@/lib/roles";
 import { listSdrs, sdrEmailById, sdrKeys } from "@/lib/sdrs";
 import { mutationErrorMessage } from "@/lib/tables";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-context";
 import { LeadDetailDrawer } from "@/ui/components/leads/lead-detail-drawer";
+import { ImportLeadsCsvDialog } from "@/ui/components/leads/import-leads-csv-dialog";
 import { LeadsList } from "@/ui/components/leads/leads-list";
 import { Button } from "@/ui/components/ui/button";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowLeft01Icon, ArrowRight01Icon, UnfoldMoreIcon } from "@hugeicons/core-free-icons";
+import {
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  UnfoldMoreIcon,
+  Upload01Icon,
+} from "@hugeicons/core-free-icons";
 
 const nativeSelectClass =
   "h-9 appearance-none rounded-lg border border-input bg-input/20 px-3 pr-9 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30";
@@ -32,7 +38,9 @@ export function LeadsPage() {
   const [replyType, setReplyType] = useState<ReplyType | null>(null);
   const [status, setStatus] = useState<LeadStatus | null>(null);
   const [selectedLead, setSelectedLead] = useState<LeadListItem | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const showAssignee = canAssignLeads(role);
+  const showImport = canImportLeads(role);
 
   const listParams = useMemo(
     () => ({
@@ -89,10 +97,16 @@ export function LeadsPage() {
         <div className="flex flex-col gap-1">
           <h1 className="m-0 text-2xl font-semibold tracking-tight text-foreground">Leads</h1>
           <p className="text-sm text-muted-foreground">
-            Imported SmartLead contacts, replies, and phone enrichment.
+            Contacts from CSV imports and SmartLead replies, with assignment and phone enrichment.
           </p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          {showImport ? (
+            <Button type="button" variant="outline" onClick={() => setImportOpen(true)}>
+              <HugeiconsIcon icon={Upload01Icon} strokeWidth={2} />
+              Import CSV
+            </Button>
+          ) : null}
           <div className="relative w-full sm:w-auto">
             <label htmlFor="lead-status" className="sr-only">
               Filter by status
@@ -154,9 +168,20 @@ export function LeadsPage() {
           </p>
           <p className="text-sm text-muted-foreground">
             {hasFilters
-              ? "Try another status or reply type, or import more SmartLead conversations."
-              : "Imported SmartLead replies will show up here."}
+              ? "Try another status or reply type, or import more leads."
+              : "Import a CSV or bring in SmartLead replies to get started."}
           </p>
+          {showImport && !hasFilters ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2"
+              onClick={() => setImportOpen(true)}
+            >
+              <HugeiconsIcon icon={Upload01Icon} strokeWidth={2} />
+              Import CSV
+            </Button>
+          ) : null}
         </div>
       ) : (
         <>
@@ -208,6 +233,7 @@ export function LeadsPage() {
         leadId={selectedLead?.id ?? null}
         summary={selectedLead}
       />
+      <ImportLeadsCsvDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }

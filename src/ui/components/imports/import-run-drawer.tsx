@@ -1,11 +1,6 @@
 import { type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  formatPropertyValue,
-  leadDisplayName,
-  leadPhone,
-  REPLY_TYPE_LABELS,
-} from "@/lib/leads";
+import { formatPropertyValue, leadDisplayName, leadPhone, REPLY_TYPE_LABELS } from "@/lib/leads";
 import {
   createPhoneEnrichment,
   getPhoneEnrichment,
@@ -100,7 +95,9 @@ export function ImportRunDrawer({ open, onOpenChange, runId, summary }: ImportRu
 
   const enrichment = enrichmentQuery.data ?? enrichmentSeedQuery.data ?? null;
   const enrichmentActive = enrichment ? phoneEnrichmentIsActive(enrichment.status) : false;
-  const canEnrich = Boolean(run && importRunCanEnrich(run) && !enrichmentActive && !enrich.isPending);
+  const canEnrich = Boolean(
+    run && importRunCanEnrich(run) && !enrichmentActive && !enrich.isPending,
+  );
   const detailError = mutationErrorMessage(
     detailQuery.error,
     detailQuery.isError ? "Failed to load import" : "",
@@ -122,7 +119,9 @@ export function ImportRunDrawer({ open, onOpenChange, runId, summary }: ImportRu
         <DrawerHeader className="relative pr-12">
           <DrawerTitle>Import run</DrawerTitle>
           <DrawerDescription>
-            {run ? `${run.campaign_ids.length} campaign${run.campaign_ids.length === 1 ? "" : "s"}` : "Import status"}
+            {run
+              ? `${run.campaign_ids.length} campaign${run.campaign_ids.length === 1 ? "" : "s"}`
+              : "Import status"}
           </DrawerDescription>
           <DrawerClose
             render={<Button variant="ghost" className="absolute top-3 right-3" size="icon-sm" />}
@@ -215,10 +214,11 @@ export function ImportRunDrawer({ open, onOpenChange, runId, summary }: ImportRu
                     <ul className="flex flex-col gap-2">
                       {leads.map((lead) => (
                         <li key={lead.id} className="min-w-0 text-sm">
-                          <p className="truncate font-medium text-foreground">{leadDisplayName(lead)}</p>
+                          <p className="truncate font-medium text-foreground">
+                            {leadDisplayName(lead)}
+                          </p>
                           <p className="truncate text-muted-foreground">
-                            {lead.email}
-                            {leadPhone(lead) ? ` · ${leadPhone(lead)}` : ""}
+                            {[lead.email, leadPhone(lead)].filter(Boolean).join(" · ")}
                           </p>
                         </li>
                       ))}
@@ -265,7 +265,9 @@ export function ImportRunDrawer({ open, onOpenChange, runId, summary }: ImportRu
                     Enrich phones for every lead captured by this import.
                   </p>
                 )}
-                {enrichmentError ? <p className="text-sm text-destructive">{enrichmentError}</p> : null}
+                {enrichmentError ? (
+                  <p className="text-sm text-destructive">{enrichmentError}</p>
+                ) : null}
                 {enrichError ? <p className="text-sm text-destructive">{enrichError}</p> : null}
               </Section>
             </div>
@@ -274,11 +276,7 @@ export function ImportRunDrawer({ open, onOpenChange, runId, summary }: ImportRu
 
         {run && importRunCanEnrich(run) ? (
           <DrawerFooter>
-            <Button
-              type="button"
-              disabled={!canEnrich}
-              onClick={() => enrich.mutate()}
-            >
+            <Button type="button" disabled={!canEnrich} onClick={() => enrich.mutate()}>
               {enrich.isPending || enrichmentActive ? (
                 <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="animate-spin" />
               ) : (

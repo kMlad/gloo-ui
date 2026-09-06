@@ -61,7 +61,7 @@ export type LeadSource = z.infer<typeof leadSourceSchema>;
 
 export const leadListItemSchema = z.object({
   id: z.string().uuid(),
-  email: z.string(),
+  email: z.string().nullable(),
   first_name: z.string().nullable(),
   last_name: z.string().nullable(),
   smartlead_phone_number: z.string().nullable(),
@@ -126,7 +126,7 @@ export type LeadConversation = z.infer<typeof leadConversationSchema>;
 
 export const leadDetailLeadSchema = z.object({
   id: z.string(),
-  email: z.string(),
+  email: z.string().nullable().optional(),
   first_name: z.string().nullable().optional(),
   last_name: z.string().nullable().optional(),
   smartlead_phone_number: z.string().nullable().optional(),
@@ -194,6 +194,98 @@ export type LeadAssignmentResponse = {
   assigned_count: number;
   skipped_count: number;
 };
+
+export const LEAD_CSV_FIELD_GROUPS = [
+  {
+    id: "company",
+    label: "Company Data",
+    fields: [
+      { id: "company_name", label: "Company" },
+      { id: "website", label: "Website" },
+      { id: "location", label: "Location" },
+    ],
+  },
+  {
+    id: "lead",
+    label: "Lead Data",
+    fields: [
+      { id: "first_name", label: "First name" },
+      { id: "last_name", label: "Last name" },
+      { id: "linkedin_profile", label: "LinkedIn" },
+      { id: "email", label: "Email" },
+      { id: "phone", label: "Phone" },
+    ],
+  },
+] as const;
+export const LEAD_CSV_FIELDS = [
+  ...LEAD_CSV_FIELD_GROUPS[0].fields,
+  ...LEAD_CSV_FIELD_GROUPS[1].fields,
+] as const;
+export type LeadCsvFieldId = (typeof LEAD_CSV_FIELDS)[number]["id"];
+export type LeadCsvFieldMapping = Record<LeadCsvFieldId, string | null>;
+
+export type LeadCsvPreview = {
+  headers: string[];
+  preview_rows: string[][];
+  row_count: number;
+  suggested_mapping: Record<string, string | null>;
+};
+
+export type LeadCsvMappingPayload = {
+  email?: string | null;
+  phone?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  company_name?: string | null;
+  location?: string | null;
+  website?: string | null;
+  linkedin_profile?: string | null;
+  custom_properties?: string[];
+};
+
+export type LeadCsvImportResult = {
+  created_count: number;
+  skipped_duplicate_count: number;
+  skipped_invalid_count: number;
+  created_lead_ids: string[];
+};
+
+export function emptyLeadCsvMapping(): LeadCsvFieldMapping {
+  const mapping = {} as LeadCsvFieldMapping;
+  for (const field of LEAD_CSV_FIELDS) {
+    mapping[field.id] = null;
+  }
+  return mapping;
+}
+
+export function mappingFromSuggestion(
+  suggested: Record<string, string | null | undefined>,
+): LeadCsvFieldMapping {
+  const mapping = emptyLeadCsvMapping();
+  for (const field of LEAD_CSV_FIELDS) {
+    mapping[field.id] = suggested[field.id] ?? null;
+  }
+  return mapping;
+}
+
+export function previewLeadsCsv(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return apiFetch<LeadCsvPreview>("/leads/imports/preview", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function importLeadsCsv(file: File, mapping: LeadCsvMappingPayload) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("mapping", JSON.stringify(mapping));
+  return apiFetch<LeadCsvImportResult>("/leads/imports", {
+    method: "POST",
+    body: form,
+  });
+}
 
 export const leadKeys = {
   all: ["leads"] as const,
@@ -281,9 +373,7 @@ export async function assignLeadsInChunks(input: LeadAssignmentRequest) {
   } satisfies LeadAssignmentResponse;
 }
 
-export function leadSourceCampaignLabel(lead: {
-  source_campaigns?: LeadSource[] | null;
-}) {
+export function leadSourceCampaignLabel(lead: { source_campaigns?: LeadSource[] | null }) {
   const names = [
     ...new Set(
       (lead.source_campaigns ?? [])
@@ -297,13 +387,22 @@ export function leadSourceCampaignLabel(lead: {
 export function leadDisplayName(lead: {
   first_name?: string | null;
   last_name?: string | null;
-  email: string;
+  email?: string | null;
+  smartlead_phone_number?: string | null;
+  enriched_phone_number?: string | null;
 }) {
   const name = [lead.first_name, lead.last_name]
     .filter((part): part is string => Boolean(part && part.trim()))
     .join(" ")
     .trim();
-  return name || lead.email;
+  if (name) {
+    return name;
+  }
+  const email = lead.email?.trim();
+  if (email) {
+    return email;
+  }
+  return leadPhone(lead) || "Untitled lead";
 }
 
 export function leadPhone(lead: {
@@ -339,9 +438,7 @@ export function leadStatusLabel(status: string | null | undefined) {
   return status ?? null;
 }
 
-export function messageDirection(reply: {
-  direction?: string | null;
-}): MessageDirection {
+export function messageDirection(reply: { direction?: string | null }): MessageDirection {
   return reply.direction === "outbound" ? "outbound" : "inbound";
 }
 

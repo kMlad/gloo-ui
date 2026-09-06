@@ -8,7 +8,10 @@ import {
   type LeadListItem,
 } from "@/lib/leads";
 import { LeadStatusBadge } from "@/ui/components/leads/lead-status-badge";
-import { tableListFeatures, type TableListFeatures } from "@/ui/components/tables/data-table-features";
+import {
+  tableListFeatures,
+  type TableListFeatures,
+} from "@/ui/components/tables/data-table-features";
 import { Button } from "@/ui/components/ui/button";
 import { Checkbox } from "@/ui/components/ui/checkbox";
 import {
@@ -161,7 +164,11 @@ export function LeadsList({
                 header: () => (
                   <Checkbox
                     checked={allPageSelected}
-                    aria-label={allPageSelected ? "Deselect all leads on this page" : "Select all leads on this page"}
+                    aria-label={
+                      allPageSelected
+                        ? "Deselect all leads on this page"
+                        : "Select all leads on this page"
+                    }
                     onCheckedChange={(checked) => selection.onTogglePage(checked === true)}
                   />
                 ),
@@ -194,9 +201,7 @@ export function LeadsList({
         columnHelper.accessor((row) => leadDisplayName(row), {
           id: "name",
           header: "Name",
-          cell: ({ row, getValue }) => (
-            <span className="font-medium text-foreground">{getValue() || row.original.email}</span>
-          ),
+          cell: ({ getValue }) => <span className="font-medium text-foreground">{getValue()}</span>,
         }),
         ...(showCampaigns
           ? [
@@ -209,16 +214,19 @@ export function LeadsList({
           : []),
         ...(assigneeEmails
           ? [
-              columnHelper.accessor((row) => {
-                if (!row.assigned_sdr_id) {
-                  return "";
-                }
-                return assigneeEmails[row.assigned_sdr_id] ?? "Assigned";
-              }, {
-                id: "assignee",
-                header: "Assignee",
-                cell: ({ getValue }) => emptyCell(getValue()),
-              }),
+              columnHelper.accessor(
+                (row) => {
+                  if (!row.assigned_sdr_id) {
+                    return "";
+                  }
+                  return assigneeEmails[row.assigned_sdr_id] ?? "Assigned";
+                },
+                {
+                  id: "assignee",
+                  header: "Assignee",
+                  cell: ({ getValue }) => emptyCell(getValue()),
+                },
+              ),
             ]
           : []),
         columnHelper.accessor("location", {
@@ -306,7 +314,10 @@ export function LeadsList({
             ))
           ) : (
             <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+              <TableCell
+                colSpan={columns.length}
+                className="h-24 text-center text-muted-foreground"
+              >
                 No leads yet.
               </TableCell>
             </TableRow>
