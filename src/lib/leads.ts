@@ -141,6 +141,7 @@ export const leadDetailLeadSchema = z.object({
   notes: z.string().nullable().optional(),
   properties: jsonRecordSchema.optional(),
   custom_properties: jsonRecordSchema.optional(),
+  source_campaigns: z.array(leadSourceSchema).optional(),
   chat_refreshed_at: z.string().nullable().optional(),
   source_observed_at: z.string().optional(),
   created_at: z.string().optional(),

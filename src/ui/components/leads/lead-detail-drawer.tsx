@@ -10,6 +10,7 @@ import {
   leadDisplayName,
   leadKeys,
   leadPhone,
+  leadSourceCampaignLabel,
   messageDirection,
   propertyEntries,
   replyTypeLabel,
@@ -44,6 +45,12 @@ import {
   SelectValue,
 } from "@/ui/components/ui/select";
 import { Skeleton } from "@/ui/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/ui/components/ui/tooltip";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Call02Icon, Cancel01Icon, LinkSquare02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 
@@ -77,6 +84,9 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
   const companyName = headerLead?.company_name?.trim() || "";
   const location = headerLead?.location?.trim() || "";
   const phone = headerLead ? leadPhone(headerLead) : null;
+  const campaignName =
+    (lead ? leadSourceCampaignLabel(lead) : null) ??
+    (summary?.id === leadId ? leadSourceCampaignLabel(summary) : null);
   const error = mutationErrorMessage(
     detailQuery.error,
     detailQuery.isError ? "Failed to load lead" : "",
@@ -162,7 +172,11 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
                   <IconField icon={Call02Icon} label="Phone" value={phone} />
                 </dl>
                 <LeadStatusField leadId={lead.id} status={lead.status ?? "new"} />
-                <PropertySection label="Custom properties" record={lead.custom_properties} />
+                <PropertySection
+                  label="Custom properties"
+                  record={lead.custom_properties}
+                  extraEntries={campaignName ? [["Campaign", campaignName]] : []}
+                />
                 <LeadNotesSection leadId={lead.id} notes={lead.notes} />
               </div>
 
@@ -472,26 +486,61 @@ function LeadNotesSection({ leadId, notes }: { leadId: string; notes: string | n
 function PropertySection({
   label,
   record,
+  extraEntries = [],
 }: {
   label: string;
   record: Record<string, unknown> | null | undefined;
+  extraEntries?: Array<[string, string]>;
 }) {
-  const entries = propertyEntries(record);
+  const extraKeys = new Set(extraEntries.map(([key]) => key));
+  const entries = [
+    ...extraEntries,
+    ...propertyEntries(record).filter(([key]) => !extraKeys.has(key)),
+  ];
   if (entries.length === 0) {
     return null;
   }
   return (
     <Section label={label}>
-      <dl className="flex flex-col gap-2">
-        {entries.map(([key, value]) => (
-          <div key={key} className="flex items-baseline justify-between gap-3">
-            <dt className="shrink-0 text-xs text-muted-foreground">{key}</dt>
-            <dd className="min-w-0 truncate text-sm text-foreground">
-              {formatPropertyValue(value)}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <TooltipProvider>
+        <dl className="flex flex-col gap-2">
+          {entries.map(([key, value], index) => {
+            const text = typeof value === "string" ? value : formatPropertyValue(value);
+            return (
+              <div key={`${key}-${index}`} className="flex items-baseline justify-between gap-3">
+                <dt className="shrink-0 text-xs text-muted-foreground">{key}</dt>
+                <dd className="min-w-0 text-sm text-foreground">
+                  {extraKeys.has(key) ? (
+                    <TruncatedTooltip text={text} />
+                  ) : (
+                    <span className="block truncate">{text}</span>
+                  )}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+      </TooltipProvider>
     </Section>
+  );
+}
+
+function TruncatedTooltip({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={200}
+        render={<span className="block min-w-0 cursor-default truncate" />}
+      >
+        {text}
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        align="end"
+        className="block max-w-sm whitespace-normal break-words text-left"
+      >
+        {text}
+      </TooltipContent>
+    </Tooltip>
   );
 }
