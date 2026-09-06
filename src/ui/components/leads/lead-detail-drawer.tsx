@@ -1,6 +1,8 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  conversationCampaignName,
+  conversationIsHeyReach,
   formatMessageTime,
   formatPropertyValue,
   getLead,
@@ -11,6 +13,7 @@ import {
   leadKeys,
   leadPhone,
   leadSourceCampaignLabel,
+  linkedinAccountNames,
   messageDirection,
   propertyEntries,
   replyTypeLabel,
@@ -18,6 +21,7 @@ import {
   type LeadConversation,
   type LeadListItem,
   type LeadReply,
+  type LeadSource,
   type LeadStatus,
 } from "@/lib/leads";
 import {
@@ -97,6 +101,17 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
   const campaignName =
     (lead ? leadSourceCampaignLabel(lead) : null) ??
     (summary?.id === leadId ? leadSourceCampaignLabel(summary) : null);
+  const sourceCampaigns =
+    (lead?.source_campaigns && lead.source_campaigns.length > 0 ? lead.source_campaigns : null) ??
+    (summary?.id === leadId ? summary.source_campaigns : null) ??
+    [];
+  const linkedinAccounts = linkedinAccountNames(conversations);
+  const extraEntries: Array<[string, string]> = [
+    ...(campaignName ? [["Campaign", campaignName] as [string, string]] : []),
+    ...(linkedinAccounts.length > 0
+      ? [["LinkedIn account", linkedinAccounts.join(", ")] as [string, string]]
+      : []),
+  ];
   const error = mutationErrorMessage(
     detailQuery.error,
     detailQuery.isError ? "Failed to load lead" : "",
@@ -210,13 +225,14 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
                 <PropertySection
                   label="Custom properties"
                   record={lead.custom_properties}
-                  extraEntries={campaignName ? [["Campaign", campaignName]] : []}
+                  extraEntries={extraEntries}
                 />
                 <LeadNotesSection leadId={lead.id} notes={lead.notes} />
               </div>
 
               <ConversationThread
                 conversations={conversations}
+                sources={sourceCampaigns}
                 expanded={threadExpanded}
                 onToggleExpand={() => setThreadExpanded((current) => !current)}
               />
@@ -232,10 +248,12 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
 
 function ConversationThread({
   conversations,
+  sources,
   expanded,
   onToggleExpand,
 }: {
   conversations: LeadConversation[];
+  sources: LeadSource[];
   expanded: boolean;
   onToggleExpand: () => void;
 }) {
@@ -243,7 +261,12 @@ function ConversationThread({
     conversation,
     messages: [...(conversation.replies ?? [])].sort(compareReceivedAt),
   }));
-  const hasMessages = grouped.some((group) => group.messages.length > 0);
+  const hasContent = grouped.some(
+    ({ conversation, messages }) =>
+      messages.length > 0 ||
+      conversationIsHeyReach(conversation) ||
+      Boolean(conversation.linkedin_sender_name?.trim()),
+  );
 
   return (
     <section
@@ -282,37 +305,48 @@ function ConversationThread({
         </TooltipProvider>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
-        {!hasMessages ? (
+        {!hasContent ? (
           <p className="text-sm text-muted-foreground">No messages yet.</p>
         ) : (
           <div className="flex flex-col gap-6">
             {grouped.map(({ conversation, messages }) => {
-              if (messages.length === 0) {
+              const replyLabel = replyTypeLabel(conversation.reply_type);
+              const senderName = conversation.linkedin_sender_name?.trim();
+              const heyreach = conversationIsHeyReach(conversation);
+              const campaignLabel = conversationCampaignName(conversation, sources);
+              const showHeader =
+                conversations.length > 1 ||
+                heyreach ||
+                Boolean(senderName) ||
+                Boolean(campaignLabel);
+              if (messages.length === 0 && !showHeader) {
                 return null;
               }
-              const replyLabel = replyTypeLabel(conversation.reply_type);
               return (
                 <div key={conversation.id} className="flex flex-col gap-3">
-                  {conversations.length > 1 ? (
+                  {showHeader ? (
                     <p className="sticky top-0 z-10 bg-popover/95 py-1 text-[0.65rem] tracking-wide text-muted-foreground uppercase backdrop-blur-sm">
-                      {replyLabel ?? "Conversation"}
-                      {conversation.smartlead_campaign_id != null
-                        ? ` · Campaign ${conversation.smartlead_campaign_id}`
-                        : ""}
+                      {replyLabel ?? (heyreach ? "LinkedIn" : "Conversation")}
+                      {senderName ? ` · ${senderName}` : ""}
+                      {campaignLabel ? ` · ${campaignLabel}` : ""}
                     </p>
                   ) : null}
-                  <ol className="flex flex-col gap-2.5">
-                    {messages.map((message, index) => {
-                      const subject = message.subject?.trim() || "";
-                      return (
-                        <ThreadMessageItem
-                          key={message.id}
-                          message={{ ...message, conversation }}
-                          showSubject={index === 0 && Boolean(subject)}
-                        />
-                      );
-                    })}
-                  </ol>
+                  {messages.length > 0 ? (
+                    <ol className="flex flex-col gap-2.5">
+                      {messages.map((message, index) => {
+                        const subject = message.subject?.trim() || "";
+                        return (
+                          <ThreadMessageItem
+                            key={message.id}
+                            message={{ ...message, conversation }}
+                            showSubject={index === 0 && Boolean(subject)}
+                          />
+                        );
+                      })}
+                    </ol>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No messages yet.</p>
+                  )}
                 </div>
               );
             })}
@@ -334,7 +368,10 @@ function ThreadMessageItem({
   const subject = message.subject?.trim() || "";
   const blocks = omitLeadingSubject(parseMessageBody(message.body), showSubject ? subject : null);
   const time = formatMessageTime(message.received_at);
-  const sender = message.sent_from?.trim();
+  const sender =
+    message.sent_from?.trim() ||
+    (outbound ? message.conversation.linkedin_sender_name?.trim() : "") ||
+    null;
 
   return (
     <li
@@ -345,7 +382,7 @@ function ThreadMessageItem({
     >
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">
-          {outbound ? "Sent" : "Received"}
+          {outbound ? (sender ?? "Sent") : "Received"}
         </p>
         {time ? (
           <time
@@ -356,7 +393,9 @@ function ThreadMessageItem({
           </time>
         ) : null}
       </div>
-      {sender ? <p className="truncate text-[0.65rem] text-muted-foreground">{sender}</p> : null}
+      {!outbound && sender ? (
+        <p className="truncate text-[0.65rem] text-muted-foreground">{sender}</p>
+      ) : null}
       {showSubject ? (
         <div className="mt-1 border-b border-border/70 pb-2.5" aria-label={`Subject: ${subject}`}>
           <p className="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">

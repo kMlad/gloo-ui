@@ -95,7 +95,8 @@ export function LeadsPage() {
         <div className="flex flex-col gap-1">
           <h1 className="m-0 text-2xl font-semibold tracking-tight text-foreground">Leads</h1>
           <p className="text-sm text-muted-foreground">
-            Contacts from CSV imports and SmartLead replies, with assignment and phone enrichment.
+            Contacts from CSV imports, SmartLead, and HeyReach replies, with assignment and phone
+            enrichment.
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -157,7 +158,7 @@ export function LeadsPage() {
           <p className="text-sm text-muted-foreground">
             {hasFilters
               ? "Try another status or reply type, or import more leads."
-              : "Import a CSV or bring in SmartLead replies to get started."}
+              : "Import a CSV or bring in SmartLead or HeyReach replies to get started."}
           </p>
           {showImport && !hasFilters ? (
             <Button

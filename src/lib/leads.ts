@@ -52,7 +52,8 @@ export const assignmentStatusSchema = z.enum(ASSIGNMENT_STATUSES);
 export type AssignmentStatus = z.infer<typeof assignmentStatusSchema>;
 
 export const leadSourceSchema = z.object({
-  smartlead_campaign_id: z.number().int(),
+  smartlead_campaign_id: z.number().int().nullable().optional(),
+  heyreach_campaign_id: z.number().int().nullable().optional(),
   name: z.string(),
   reply_type: replyTypeSchema.nullable(),
   qualified_at: z.string(),
@@ -100,6 +101,7 @@ export const leadReplySchema = z.object({
   id: z.string(),
   conversation_id: z.string().optional(),
   smartlead_message_id: z.string().nullable().optional(),
+  heyreach_message_id: z.string().nullable().optional(),
   subject: z.string().nullable().optional(),
   body: z.string().optional(),
   sent_from: z.string().nullable().optional(),
@@ -113,8 +115,13 @@ export type LeadReply = z.infer<typeof leadReplySchema>;
 export const leadConversationSchema = z.object({
   id: z.string(),
   smartlead_campaign_id: z.number().int().optional(),
+  heyreach_campaign_id: z.number().int().optional(),
+  heyreach_conversation_id: z.string().nullable().optional(),
   smartlead_campaign_lead_map_id: z.string().nullable().optional(),
   smartlead_lead_id: z.string().nullable().optional(),
+  heyreach_lead_id: z.string().nullable().optional(),
+  linkedin_account_id: z.number().int().nullable().optional(),
+  linkedin_sender_name: z.string().nullable().optional(),
   reply_type: replyTypeSchema.nullable().optional(),
   positive_category_name: z.string().nullable().optional(),
   qualified_at: z.string().nullable().optional(),
@@ -383,6 +390,41 @@ export function leadSourceCampaignLabel(lead: { source_campaigns?: LeadSource[] 
     ),
   ];
   return names.length > 0 ? names.join(", ") : null;
+}
+
+export function conversationIsHeyReach(conversation: { heyreach_campaign_id?: number | null }) {
+  return conversation.heyreach_campaign_id != null;
+}
+
+export function linkedinAccountNames(conversations: LeadConversation[]) {
+  return [
+    ...new Set(
+      conversations
+        .map((conversation) => conversation.linkedin_sender_name?.trim())
+        .filter((name): name is string => Boolean(name)),
+    ),
+  ];
+}
+
+export function conversationCampaignName(
+  conversation: LeadConversation,
+  sources: LeadSource[] = [],
+) {
+  if (conversation.heyreach_campaign_id != null) {
+    const match = sources.find(
+      (source) => source.heyreach_campaign_id === conversation.heyreach_campaign_id,
+    );
+    const name = match?.name.trim();
+    return name || null;
+  }
+  if (conversation.smartlead_campaign_id != null) {
+    const match = sources.find(
+      (source) => source.smartlead_campaign_id === conversation.smartlead_campaign_id,
+    );
+    const name = match?.name.trim();
+    return name || `Campaign ${conversation.smartlead_campaign_id}`;
+  }
+  return null;
 }
 
 export function leadDisplayName(lead: {
