@@ -1,14 +1,12 @@
 import { useMemo, type KeyboardEvent, type MouseEvent } from "react";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
 import { REPLY_TYPE_LABELS, type ReplyType } from "@/lib/leads";
-import {
-  dedicatedImportLeadCount,
-  importRunIsActive,
-  type Campaign,
-  type ImportRun,
-} from "@/lib/smartlead";
+import { campaignImportIsActive, campaignLastImport, type Campaign } from "@/lib/smartlead";
 import { formatTableDate } from "@/lib/tables";
-import { ImportStatusBadge } from "@/ui/components/imports/run-status-badge";
+import {
+  ImportStatusBadge,
+  PhoneEnrichmentStatusBadge,
+} from "@/ui/components/imports/run-status-badge";
 import { CampaignStatusBadge } from "@/ui/components/campaigns/campaign-status-badge";
 import {
   tableListFeatures,
@@ -37,9 +35,7 @@ const columnHelper = createColumnHelper<TableListFeatures, Campaign>();
 type CampaignsListProps = {
   campaigns: Campaign[];
   selectedCampaignId: number | null;
-  latestRunFor: (campaignId: number, replyType: ReplyType) => ImportRun | null;
-  importing: { campaignId: number; replyType: ReplyType } | null;
-  importLocked: boolean;
+  isImportPending: (campaignId: number, replyType: ReplyType) => boolean;
   onSelectCampaign: (campaign: Campaign) => void;
   onImport: (campaign: Campaign, replyType: ReplyType) => void;
 };
@@ -59,34 +55,30 @@ function ReplyImportCell({
   campaign,
   replyType,
   count,
-  run,
-  importing,
-  importLocked,
+  isImportPending,
   onImport,
 }: {
   campaign: Campaign;
   replyType: ReplyType;
   count: number;
-  run: ImportRun | null;
-  importing: { campaignId: number; replyType: ReplyType } | null;
-  importLocked: boolean;
+  isImportPending: (campaignId: number, replyType: ReplyType) => boolean;
   onImport: (campaign: Campaign, replyType: ReplyType) => void;
 }) {
-  const isThisImport =
-    importing?.campaignId === campaign.smartlead_campaign_id && importing.replyType === replyType;
-  const runActive = Boolean(run && importRunIsActive(run.status));
-  const busy = isThisImport || runActive;
-  const disabled = busy || (importLocked && !isThisImport);
+  const lastImport = campaignLastImport(campaign, replyType);
+  const enrichment = lastImport?.last_enrichment ?? null;
+  const pending = isImportPending(campaign.smartlead_campaign_id, replyType);
+  const busy = pending || campaignImportIsActive(campaign, replyType);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <span className="min-w-6 tabular-nums">{count}</span>
-      {run ? <ImportStatusBadge status={run.status} /> : null}
+      {lastImport ? <ImportStatusBadge status={lastImport.status} /> : null}
+      {enrichment ? <PhoneEnrichmentStatusBadge status={enrichment.status} /> : null}
       <Button
         type="button"
         size="sm"
         variant="outline"
-        disabled={disabled}
+        disabled={busy}
         aria-label={`Import ${REPLY_TYPE_LABELS[replyType].toLowerCase()} replies from ${campaign.name}`}
         onClick={(event) => {
           stopRowActivation(event);
@@ -99,7 +91,7 @@ function ReplyImportCell({
         ) : (
           <HugeiconsIcon icon={Download01Icon} strokeWidth={2} />
         )}
-        {busy ? "Importing…" : run ? "Re-import" : "Import"}
+        {busy ? "Importing…" : lastImport ? "Re-import" : "Import"}
       </Button>
     </div>
   );
@@ -108,9 +100,7 @@ function ReplyImportCell({
 export function CampaignsList({
   campaigns,
   selectedCampaignId,
-  latestRunFor,
-  importing,
-  importLocked,
+  isImportPending,
   onSelectCampaign,
   onImport,
 }: CampaignsListProps) {
@@ -141,38 +131,28 @@ export function CampaignsList({
         columnHelper.accessor("positive_lead_count", {
           header: "Positive",
           enableSorting: false,
-          cell: ({ row }) => {
-            const run = latestRunFor(row.original.smartlead_campaign_id, "positive");
-            return (
-              <ReplyImportCell
-                campaign={row.original}
-                replyType="positive"
-                count={dedicatedImportLeadCount(run, row.original.positive_lead_count)}
-                run={run}
-                importing={importing}
-                importLocked={importLocked}
-                onImport={onImport}
-              />
-            );
-          },
+          cell: ({ row }) => (
+            <ReplyImportCell
+              campaign={row.original}
+              replyType="positive"
+              count={row.original.positive_lead_count}
+              isImportPending={isImportPending}
+              onImport={onImport}
+            />
+          ),
         }),
         columnHelper.accessor("ooo_lead_count", {
           header: "OOO",
           enableSorting: false,
-          cell: ({ row }) => {
-            const run = latestRunFor(row.original.smartlead_campaign_id, "ooo");
-            return (
-              <ReplyImportCell
-                campaign={row.original}
-                replyType="ooo"
-                count={dedicatedImportLeadCount(run, row.original.ooo_lead_count)}
-                run={run}
-                importing={importing}
-                importLocked={importLocked}
-                onImport={onImport}
-              />
-            );
-          },
+          cell: ({ row }) => (
+            <ReplyImportCell
+              campaign={row.original}
+              replyType="ooo"
+              count={row.original.ooo_lead_count}
+              isImportPending={isImportPending}
+              onImport={onImport}
+            />
+          ),
         }),
         columnHelper.accessor("last_imported_at", {
           header: "Last imported",
@@ -182,7 +162,7 @@ export function CampaignsList({
           },
         }),
       ]),
-    [importLocked, importing, latestRunFor, onImport],
+    [isImportPending, onImport],
   );
 
   const table = useTable({

@@ -3,20 +3,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatPropertyValue, REPLY_TYPE_LABELS, type ReplyType } from "@/lib/leads";
 import {
   createPhoneEnrichment,
-  getPhoneEnrichment,
+  getLatestPhoneEnrichmentForImport,
   phoneEnrichmentIsActive,
   phoneEnrichmentKeys,
-  type PhoneEnrichmentRun,
+  phoneEnrichmentSnapshotFromRun,
+  type PhoneEnrichmentSnapshot,
 } from "@/lib/phone-enrichments";
 import {
-  dedicatedImportLeadCount,
+  campaignImportIsActive,
+  campaignKeys,
+  campaignLastImport,
   getImport,
   importKeys,
   importRunCanEnrich,
   importRunIsActive,
-  latestDedicatedImport,
-  mergeImportRuns,
+  withCampaignLastEnrichment,
   type Campaign,
+  type CampaignLastImport,
   type ImportRun,
 } from "@/lib/smartlead";
 import { formatTableDate, mutationErrorMessage } from "@/lib/tables";
@@ -46,10 +49,8 @@ type CampaignDetailDrawerProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   campaign: Campaign | null;
-  runs: ImportRun[];
-  importing: { campaignId: number; replyType: ReplyType } | null;
-  importLocked: boolean;
-  importError: string;
+  isImportPending: (campaignId: number, replyType: ReplyType) => boolean;
+  importErrorFor: (campaignId: number, replyType: ReplyType) => string;
   onImport: (campaign: Campaign, replyType: ReplyType) => void;
 };
 
@@ -57,22 +58,10 @@ export function CampaignDetailDrawer({
   open,
   onOpenChange,
   campaign,
-  runs,
-  importing,
-  importLocked,
-  importError,
+  isImportPending,
+  importErrorFor,
   onImport,
 }: CampaignDetailDrawerProps) {
-  const fallbackRunId = campaign?.last_import_run_id ?? null;
-  const fallbackQuery = useQuery({
-    queryKey: importKeys.detail(fallbackRunId ?? ""),
-    queryFn: ({ signal }) => getImport(fallbackRunId ?? "", signal),
-    enabled: open && Boolean(fallbackRunId),
-    retry: false,
-  });
-  const fallbackRun = fallbackQuery.data ?? null;
-  const mergedRuns = mergeImportRuns(runs, fallbackRun ? [fallbackRun] : null);
-
   return (
     <Drawer open={open} onOpenChange={onOpenChange} swipeDirection="right">
       <DrawerContent className="sm:[--drawer-content-width:36rem]">
@@ -101,8 +90,6 @@ export function CampaignDetailDrawer({
                 </span>
               </div>
 
-              {importError ? <p className="text-sm text-destructive">{importError}</p> : null}
-
               {(["positive", "ooo"] as const).map((replyType) => (
                 <ReplyImportPanel
                   key={replyType}
@@ -114,9 +101,9 @@ export function CampaignDetailDrawer({
                       ? campaign.positive_lead_count
                       : campaign.ooo_lead_count
                   }
-                  run={latestDedicatedImport(mergedRuns, campaign.smartlead_campaign_id, replyType)}
-                  importing={importing}
-                  importLocked={importLocked}
+                  lastImport={campaignLastImport(campaign, replyType)}
+                  importPending={isImportPending(campaign.smartlead_campaign_id, replyType)}
+                  importError={importErrorFor(campaign.smartlead_campaign_id, replyType)}
                   onImport={onImport}
                 />
               ))}
@@ -133,76 +120,81 @@ function ReplyImportPanel({
   campaign,
   replyType,
   leadCount,
-  run: listedRun,
-  importing,
-  importLocked,
+  lastImport,
+  importPending,
+  importError,
   onImport,
 }: {
   open: boolean;
   campaign: Campaign;
   replyType: ReplyType;
   leadCount: number;
-  run: ImportRun | null;
-  importing: { campaignId: number; replyType: ReplyType } | null;
-  importLocked: boolean;
+  lastImport: CampaignLastImport | null;
+  importPending: boolean;
+  importError: string;
   onImport: (campaign: Campaign, replyType: ReplyType) => void;
 }) {
   const queryClient = useQueryClient();
-  const runId = listedRun?.id ?? null;
-  const isThisImport =
-    importing?.campaignId === campaign.smartlead_campaign_id && importing.replyType === replyType;
+  const runId = lastImport?.id ?? null;
+  const importBusy = importPending || campaignImportIsActive(campaign, replyType);
 
   const detailQuery = useQuery({
     queryKey: importKeys.detail(runId ?? ""),
     queryFn: ({ signal }) => getImport(runId ?? "", signal),
     enabled: open && Boolean(runId),
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
+      const status = query.state.data?.status ?? lastImport?.status;
       return status && importRunIsActive(status) ? 2000 : false;
     },
   });
 
-  const run = detailQuery.data ?? listedRun;
+  const run: ImportRun | CampaignLastImport | null = detailQuery.data ?? lastImport;
   const runActive = Boolean(run && importRunIsActive(run.status));
-  const importBusy = isThisImport || runActive;
-  const importDisabled = importBusy || (importLocked && !isThisImport);
-  const importedLeadCount = dedicatedImportLeadCount(run, leadCount);
-
-  const enrichmentSeedQuery = useQuery<PhoneEnrichmentRun>({
-    queryKey: phoneEnrichmentKeys.byImport(runId ?? ""),
-    queryFn: () => Promise.reject(new Error("Phone enrichment seed is cache-only")),
-    enabled: false,
-    staleTime: Infinity,
-  });
-
-  const enrichmentRunId = enrichmentSeedQuery.data?.id ?? null;
+  const lastEnrichment = detailQuery.data?.last_enrichment ?? lastImport?.last_enrichment ?? null;
 
   const enrichmentQuery = useQuery({
-    queryKey: phoneEnrichmentKeys.detail(enrichmentRunId ?? ""),
-    queryFn: ({ signal }) => getPhoneEnrichment(enrichmentRunId ?? "", signal),
-    enabled: open && Boolean(enrichmentRunId),
+    queryKey: phoneEnrichmentKeys.byImport(runId ?? ""),
+    queryFn: ({ signal }) => getLatestPhoneEnrichmentForImport(runId ?? "", signal),
+    enabled: open && Boolean(runId),
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
+      const status = query.state.data?.status ?? lastEnrichment?.status;
       return status && phoneEnrichmentIsActive(status) ? 2000 : false;
     },
   });
 
   const enrich = useMutation({
     mutationFn: () => createPhoneEnrichment({ source_import_run_id: runId ?? "" }),
-    onSuccess: (enrichmentRun) => {
+    onSuccess: async (enrichmentRun) => {
       if (!runId) {
         return;
       }
       queryClient.setQueryData(phoneEnrichmentKeys.byImport(runId), enrichmentRun);
       queryClient.setQueryData(phoneEnrichmentKeys.detail(enrichmentRun.id), enrichmentRun);
+      queryClient.setQueryData<Campaign[]>(campaignKeys.all, (current) =>
+        current
+          ? withCampaignLastEnrichment(
+              current,
+              campaign.smartlead_campaign_id,
+              replyType,
+              phoneEnrichmentSnapshotFromRun(enrichmentRun),
+            )
+          : current,
+      );
+      await queryClient.invalidateQueries({ queryKey: campaignKeys.all });
     },
   });
 
-  const enrichment = enrichmentQuery.data ?? enrichmentSeedQuery.data ?? null;
+  const enrichment: PhoneEnrichmentSnapshot | null = enrichmentQuery.data ?? lastEnrichment ?? null;
   const enrichmentActive = enrichment ? phoneEnrichmentIsActive(enrichment.status) : false;
   const canEnrich = Boolean(
     run && importRunCanEnrich(run) && !enrichmentActive && !enrich.isPending,
   );
+  const processedCount = enrichment
+    ? enrichment.leads_enriched +
+      enrichment.leads_not_found +
+      enrichment.leads_skipped +
+      enrichment.leads_failed
+    : 0;
   const detailError = mutationErrorMessage(
     detailQuery.error,
     detailQuery.isError ? "Failed to load import" : "",
@@ -224,14 +216,14 @@ function ReplyImportPanel({
             {REPLY_TYPE_LABELS[replyType]} replies
           </h3>
           <p className="text-xs text-muted-foreground">
-            {importedLeadCount} imported lead{importedLeadCount === 1 ? "" : "s"}
+            {leadCount} imported lead{leadCount === 1 ? "" : "s"}
           </p>
         </div>
         <Button
           type="button"
           size="sm"
           variant="outline"
-          disabled={importDisabled}
+          disabled={importBusy}
           onClick={() => onImport(campaign, replyType)}
         >
           {importBusy ? (
@@ -243,6 +235,7 @@ function ReplyImportPanel({
         </Button>
       </div>
 
+      {importError ? <p className="text-sm text-destructive">{importError}</p> : null}
       {detailError && !run ? <p className="text-sm text-destructive">{detailError}</p> : null}
 
       {run ? (
@@ -264,7 +257,9 @@ function ReplyImportPanel({
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <Stat label="Leads" value={run.leads_processed} />
               <Stat label="Conversations" value={run.conversations_processed} />
-              <Stat label="Replies" value={run.replies_processed} />
+              {detailQuery.data ? (
+                <Stat label="Replies" value={detailQuery.data.replies_processed} />
+              ) : null}
               <Stat label="Qualifying" value={run.qualifying_conversation_count} />
             </dl>
           </Section>
@@ -307,6 +302,11 @@ function ReplyImportPanel({
                     />
                   ) : null}
                 </div>
+                {enrichment.leads_selected > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {processedCount} of {enrichment.leads_selected} processed
+                  </p>
+                ) : null}
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <Stat label="Selected" value={enrichment.leads_selected} />
                   <Stat label="Enriched" value={enrichment.leads_enriched} />
