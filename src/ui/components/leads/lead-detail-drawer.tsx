@@ -52,7 +52,16 @@ import {
   TooltipTrigger,
 } from "@/ui/components/ui/tooltip";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Call02Icon, Cancel01Icon, LinkSquare02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
+import {
+  ArrowExpand01Icon,
+  ArrowShrink01Icon,
+  Call02Icon,
+  Cancel01Icon,
+  Copy01Icon,
+  LinkSquare02Icon,
+  Mail01Icon,
+  Tick02Icon,
+} from "@hugeicons/core-free-icons";
 
 const textareaClass =
   "min-h-24 w-full resize-y rounded-lg border border-input bg-input/20 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
@@ -69,6 +78,7 @@ type ThreadMessage = LeadReply & {
 };
 
 export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDetailDrawerProps) {
+  const [threadExpanded, setThreadExpanded] = useState(false);
   const detailQuery = useQuery({
     queryKey: leadKeys.detail(leadId ?? ""),
     queryFn: ({ signal }) => getLead(leadId ?? "", signal),
@@ -94,7 +104,13 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} swipeDirection="right">
-      <DrawerContent className="sm:[--drawer-content-width:32rem]">
+      <DrawerContent
+        className={
+          threadExpanded
+            ? "data-[swipe-axis=x]:[--drawer-content-width:calc(100vw-1rem)] data-[swipe-axis=x]:sm:[--drawer-content-width:min(64rem,calc(100vw-1rem))]"
+            : "data-[swipe-axis=x]:sm:[--drawer-content-width:32rem]"
+        }
+      >
         <DrawerHeader className="relative pr-12">
           <DrawerTitle className="min-w-0">
             {linkedinHref ? (
@@ -165,13 +181,32 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
           ) : error ? (
             <p className="p-4 text-sm text-destructive">{error}</p>
           ) : lead ? (
-            <>
-              <div className="flex shrink-0 flex-col gap-4 px-4 pt-4 pb-3">
-                <dl className="flex flex-col gap-2">
-                  <IconField icon={Mail01Icon} label="Email" value={lead.email} />
-                  <IconField icon={Call02Icon} label="Phone" value={phone} />
-                </dl>
-                <LeadStatusField leadId={lead.id} status={lead.status ?? "new"} />
+            <div
+              className={cn(
+                "flex min-h-0 flex-1",
+                threadExpanded ? "flex-col md:flex-row" : "flex-col",
+              )}
+            >
+              <div
+                className={cn(
+                  "flex flex-col gap-4 px-4 pt-4 pb-3",
+                  threadExpanded
+                    ? "min-h-0 max-h-[38%] shrink-0 overflow-y-auto overscroll-contain border-b border-border/70 md:max-h-none md:w-80 md:shrink-0 md:self-stretch md:border-r md:border-b-0"
+                    : "shrink-0",
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex flex-col gap-4",
+                    threadExpanded && "sticky top-0 z-10 bg-popover/95 pb-1 backdrop-blur-sm",
+                  )}
+                >
+                  <dl className="flex flex-col gap-2">
+                    <IconField icon={Mail01Icon} label="Email" value={lead.email} />
+                    <IconField icon={Call02Icon} label="Phone" value={phone} />
+                  </dl>
+                  <LeadStatusField leadId={lead.id} status={lead.status ?? "new"} />
+                </div>
                 <PropertySection
                   label="Custom properties"
                   record={lead.custom_properties}
@@ -180,8 +215,12 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
                 <LeadNotesSection leadId={lead.id} notes={lead.notes} />
               </div>
 
-              <ConversationThread conversations={conversations} />
-            </>
+              <ConversationThread
+                conversations={conversations}
+                expanded={threadExpanded}
+                onToggleExpand={() => setThreadExpanded((current) => !current)}
+              />
+            </div>
           ) : (
             <p className="p-4 text-sm text-muted-foreground">Select a lead to inspect.</p>
           )}
@@ -191,7 +230,15 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
   );
 }
 
-function ConversationThread({ conversations }: { conversations: LeadConversation[] }) {
+function ConversationThread({
+  conversations,
+  expanded,
+  onToggleExpand,
+}: {
+  conversations: LeadConversation[];
+  expanded: boolean;
+  onToggleExpand: () => void;
+}) {
   const grouped = conversations.map((conversation) => ({
     conversation,
     messages: [...(conversation.replies ?? [])].sort(compareReceivedAt),
@@ -199,10 +246,41 @@ function ConversationThread({ conversations }: { conversations: LeadConversation
   const hasMessages = grouped.some((group) => group.messages.length > 0);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col border-t border-border/70">
-      <h3 className="shrink-0 px-4 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        Thread
-      </h3>
+    <section
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col",
+        expanded ? "md:border-t-0" : "border-t border-border/70",
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2">
+        <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Thread
+        </h3>
+        <TooltipProvider delay={200}>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={expanded ? "Collapse thread" : "Expand thread"}
+                  aria-expanded={expanded}
+                  onClick={onToggleExpand}
+                />
+              }
+            >
+              <HugeiconsIcon
+                icon={expanded ? ArrowShrink01Icon : ArrowExpand01Icon}
+                strokeWidth={2}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              {expanded ? "Show compact view" : "Expand thread"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
         {!hasMessages ? (
           <p className="text-sm text-muted-foreground">No messages yet.</p>
@@ -361,6 +439,40 @@ function compareReceivedAt(a: LeadReply, b: LeadReply) {
   return (Number.isNaN(aTime) ? 0 : aTime) - (Number.isNaN(bTime) ? 0 : bTime);
 }
 
+function CopyValueButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+
+  async function copyValue() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-xs"
+      className="shrink-0"
+      aria-label={copied ? "Copied" : `Copy ${label.toLowerCase()}`}
+      onClick={copyValue}
+    >
+      <HugeiconsIcon icon={copied ? Tick02Icon : Copy01Icon} strokeWidth={2} />
+    </Button>
+  );
+}
+
 function IconField({
   icon,
   label,
@@ -370,7 +482,8 @@ function IconField({
   label: string;
   value: string | null | undefined;
 }) {
-  if (!value?.trim()) {
+  const text = value?.trim();
+  if (!text) {
     return null;
   }
   return (
@@ -379,7 +492,10 @@ function IconField({
         <HugeiconsIcon icon={icon} strokeWidth={2} className="size-3.5" />
         <span className="sr-only">{label}</span>
       </dt>
-      <dd className="min-w-0 truncate text-sm text-foreground">{value}</dd>
+      <dd className="flex min-w-0 items-center gap-1">
+        <span className="min-w-0 truncate text-sm text-foreground">{text}</span>
+        <CopyValueButton value={text} label={label} />
+      </dd>
     </div>
   );
 }
