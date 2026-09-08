@@ -92,8 +92,8 @@ export function SpeedToLeadPage() {
             Speed to lead
           </h1>
           <p className="text-sm text-muted-foreground">
-            Positive replies assigned for a first touch. Open a row to call, then change status to
-            clear it from the queue.
+            SmartLead and HeyReach replies assigned for a first touch. Open a row to call, then
+            change status to clear it from the queue.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -124,8 +124,8 @@ export function SpeedToLeadPage() {
           </p>
           <p className="text-sm text-muted-foreground">
             {includeHandled
-              ? "Enable speed to lead on a SmartLead campaign to capture positive replies here."
-              : "New positive replies will show up here. Show handled to review earlier work."}
+              ? "Enable speed to lead on a SmartLead or HeyReach campaign to capture replies here."
+              : "New replies will show up here. Show handled to review earlier work."}
           </p>
         </div>
       ) : (

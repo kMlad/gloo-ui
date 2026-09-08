@@ -16,6 +16,11 @@ export const SPEED_TO_LEAD_NOTIFICATION_STATUSES = [
 export const speedToLeadNotificationStatusSchema = z.enum(SPEED_TO_LEAD_NOTIFICATION_STATUSES);
 export type SpeedToLeadNotificationStatus = z.infer<typeof speedToLeadNotificationStatusSchema>;
 
+export type SpeedToLeadCampaignUpdate = {
+  enabled: boolean;
+  sdr_id?: string | null;
+};
+
 export const speedToLeadEventItemSchema = z.object({
   id: z.string().uuid(),
   platform: leadPlatformSchema,

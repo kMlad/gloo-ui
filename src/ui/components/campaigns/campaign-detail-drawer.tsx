@@ -91,7 +91,7 @@ export function CampaignDetailDrawer({
                 </span>
               </div>
 
-              <SpeedToLeadSettings campaign={campaign} />
+              <SpeedToLeadSettings source="smartlead" campaign={campaign} />
 
               {(["positive", "ooo"] as const).map((replyType) => (
                 <ReplyImportPanel

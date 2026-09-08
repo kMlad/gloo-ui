@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
-import { hrefFromUrl, leadDisplayName, leadPhone, type LeadListItem } from "@/lib/leads";
+import {
+  hrefFromUrl,
+  LEAD_PLATFORM_LABELS,
+  leadDisplayName,
+  leadPhone,
+  type LeadListItem,
+} from "@/lib/leads";
 import { phoneEnrichmentIsActive } from "@/lib/phone-enrichments";
 import { formatTableDate } from "@/lib/tables";
 import { formatTimeSince, type SpeedToLeadEventItem } from "@/lib/speed-to-lead";
@@ -183,7 +189,16 @@ export function SpeedToLeadList({
         }),
         columnHelper.accessor("campaign_name", {
           header: "Campaign",
-          cell: ({ getValue }) => emptyCell(getValue()),
+          cell: ({ row }) => (
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-foreground">
+                {emptyCell(row.original.campaign_name)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {LEAD_PLATFORM_LABELS[row.original.platform]}
+              </span>
+            </div>
+          ),
         }),
         columnHelper.accessor("reply_excerpt", {
           header: "Reply",

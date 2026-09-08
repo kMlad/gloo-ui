@@ -6,6 +6,7 @@ import {
   phoneEnrichmentSnapshotSchema,
   type PhoneEnrichmentSnapshot,
 } from "@/lib/phone-enrichments";
+import { type SpeedToLeadCampaignUpdate } from "@/lib/speed-to-lead";
 
 export const IMPORT_STATUSES = [
   "queued",
@@ -73,10 +74,7 @@ export const campaignSchema = z.object({
 });
 export type Campaign = z.infer<typeof campaignSchema>;
 
-export type SpeedToLeadCampaignUpdate = {
-  enabled: boolean;
-  sdr_id?: string | null;
-};
+export type { SpeedToLeadCampaignUpdate };
 
 export const importRunSchema = z.object({
   id: z.string().uuid(),

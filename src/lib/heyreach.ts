@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { apiFetch } from "@/lib/api";
-import { type LeadListResponse } from "@/lib/leads";
+import { replyTypeSchema, type LeadListResponse } from "@/lib/leads";
+import { type SpeedToLeadCampaignUpdate } from "@/lib/speed-to-lead";
 import {
   phoneEnrichmentIsActive,
   phoneEnrichmentSnapshotSchema,
@@ -28,6 +29,8 @@ export const heyreachCampaignSchema = z.object({
   last_imported_at: z.string().nullable().optional(),
   last_import_run_id: z.string().uuid().nullable().optional(),
   last_import: campaignLastImportSchema.nullable().optional(),
+  speed_to_lead_enabled: z.boolean().optional().default(false),
+  speed_to_lead_sdr_id: z.string().uuid().nullable().optional().default(null),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -37,6 +40,7 @@ export const heyreachImportRunSchema = z.object({
   id: z.string().uuid(),
   status: importStatusSchema,
   campaign_ids: z.array(z.number().int()),
+  reply_types: z.array(replyTypeSchema).default([]),
   reply_time_from: z.string().nullable(),
   reply_time_to: z.string().nullable(),
   requested_by: z.string().uuid().nullable().optional(),
@@ -69,6 +73,13 @@ export const heyreachImportKeys = {
 
 export function listHeyReachCampaigns(signal?: AbortSignal) {
   return apiFetch<HeyReachCampaign[]>("/heyreach/campaigns", { signal });
+}
+
+export function updateHeyReachSpeedToLead(campaignId: number, input: SpeedToLeadCampaignUpdate) {
+  return apiFetch<HeyReachCampaign>(`/heyreach/campaigns/${campaignId}/speed-to-lead`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export function createHeyReachImport(input: CreateHeyReachImportInput) {
@@ -131,7 +142,7 @@ export function heyreachLastImportFromRun(run: HeyReachImportRun): CampaignLastI
     id: run.id,
     status: run.status,
     campaign_ids: run.campaign_ids,
-    reply_types: [],
+    reply_types: run.reply_types ?? [],
     leads_processed: run.leads_processed,
     conversations_processed: run.conversations_processed,
     qualifying_conversation_count: run.qualifying_conversation_count,
@@ -140,6 +151,18 @@ export function heyreachLastImportFromRun(run: HeyReachImportRun): CampaignLastI
     completed_at: run.completed_at,
     last_enrichment: run.last_enrichment ?? null,
   };
+}
+
+export function withHeyReachSpeedToLead(
+  campaigns: HeyReachCampaign[],
+  updated: HeyReachCampaign,
+): HeyReachCampaign[] {
+  return campaigns.map((campaign) => {
+    if (campaign.heyreach_campaign_id !== updated.heyreach_campaign_id) {
+      return campaign;
+    }
+    return { ...campaign, ...updated };
+  });
 }
 
 export function withHeyReachLastImport(
