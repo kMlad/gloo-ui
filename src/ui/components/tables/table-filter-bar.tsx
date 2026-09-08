@@ -310,6 +310,7 @@ function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: 
         Column
       </label>
       <Select
+        items={columns.map((item) => ({ value: item.id, label: item.name }))}
         value={column.id}
         disabled={disabled}
         onValueChange={(value) => {
@@ -334,6 +335,7 @@ function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: 
         Operator
       </label>
       <Select
+        items={operators.map((item) => ({ value: item, label: filterOperatorLabel(item) }))}
         value={operator}
         disabled={disabled}
         onValueChange={(value) => {
@@ -356,6 +358,10 @@ function FilterEditor({ columns, initial, disabled = false, onSave, onCancel }: 
 
       {filterOperatorNeedsValue(operator) && column.type === "boolean" ? (
         <Select
+          items={[
+            { value: "true", label: "True" },
+            { value: "false", label: "False" },
+          ]}
           value={booleanValue ? "true" : "false"}
           disabled={disabled}
           onValueChange={(value) => setBooleanValue(value === "true")}

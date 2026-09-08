@@ -66,10 +66,17 @@ export const campaignSchema = z.object({
   last_imported_at: z.string().nullable().optional(),
   last_import_run_id: z.string().uuid().nullable().optional(),
   last_imports: campaignLastImportsSchema,
+  speed_to_lead_enabled: z.boolean().optional().default(false),
+  speed_to_lead_sdr_id: z.string().uuid().nullable().optional().default(null),
   created_at: z.string(),
   updated_at: z.string(),
 });
 export type Campaign = z.infer<typeof campaignSchema>;
+
+export type SpeedToLeadCampaignUpdate = {
+  enabled: boolean;
+  sdr_id?: string | null;
+};
 
 export const importRunSchema = z.object({
   id: z.string().uuid(),
@@ -134,6 +141,13 @@ export function newIdempotencyKey() {
 
 export function listCampaigns(signal?: AbortSignal) {
   return apiFetch<Campaign[]>("/smartlead/campaigns", { signal });
+}
+
+export function updateSpeedToLead(campaignId: number, input: SpeedToLeadCampaignUpdate) {
+  return apiFetch<Campaign>(`/smartlead/campaigns/${campaignId}/speed-to-lead`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export function createImport(input: CreateImportInput) {
@@ -259,6 +273,15 @@ export function withCampaignLastImport(
         [replyType]: lastImport,
       },
     };
+  });
+}
+
+export function withCampaignSpeedToLead(campaigns: Campaign[], updated: Campaign): Campaign[] {
+  return campaigns.map((campaign) => {
+    if (campaign.smartlead_campaign_id !== updated.smartlead_campaign_id) {
+      return campaign;
+    }
+    return { ...campaign, ...updated };
   });
 }
 

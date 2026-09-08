@@ -16,6 +16,7 @@ import { TableDetailPage } from "./ui/pages/table-detail-page";
 import { LeadsPage } from "./ui/pages/leads-page";
 import { AssignLeadsPage } from "./ui/pages/assign-leads-page";
 import { CampaignsPage } from "./ui/pages/campaigns-page";
+import { SpeedToLeadPage } from "./ui/pages/speed-to-lead-page";
 
 export const router = createBrowserRouter([
   {
@@ -67,6 +68,10 @@ export const router = createBrowserRouter([
               {
                 path: "/leads",
                 Component: LeadsPage,
+              },
+              {
+                path: "/speed-to-lead",
+                Component: SpeedToLeadPage,
               },
               {
                 Component: AssignLeadsLayout,

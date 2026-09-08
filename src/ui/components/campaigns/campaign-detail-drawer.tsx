@@ -24,6 +24,7 @@ import {
 } from "@/lib/smartlead";
 import { formatTableDate, mutationErrorMessage } from "@/lib/tables";
 import { CampaignStatusBadge } from "@/ui/components/campaigns/campaign-status-badge";
+import { SpeedToLeadSettings } from "@/ui/components/campaigns/speed-to-lead-settings";
 import {
   ImportStatusBadge,
   PhoneEnrichmentStatusBadge,
@@ -89,6 +90,8 @@ export function CampaignDetailDrawer({
                   {campaign.smartlead_campaign_id}
                 </span>
               </div>
+
+              <SpeedToLeadSettings campaign={campaign} />
 
               {(["positive", "ooo"] as const).map((replyType) => (
                 <ReplyImportPanel

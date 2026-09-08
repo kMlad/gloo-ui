@@ -49,3 +49,7 @@ export function canAssignLeads(role: AppRole | null | undefined): boolean {
 export function canImportLeads(role: AppRole | null | undefined): boolean {
   return role === "admin" || role === "sales_lead" || role === "sdr";
 }
+
+export function canAccessSpeedToLead(role: AppRole | null | undefined): boolean {
+  return role === "admin" || role === "sales_lead" || role === "sdr";
+}

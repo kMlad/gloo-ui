@@ -114,6 +114,7 @@ export function CampaignsList({
               <span className="truncate font-medium text-foreground">{row.original.name}</span>
               <span className="text-xs text-muted-foreground">
                 {row.original.smartlead_campaign_id}
+                {row.original.speed_to_lead_enabled ? " · Speed to lead" : ""}
               </span>
             </div>
           ),

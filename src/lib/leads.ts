@@ -90,6 +90,7 @@ export const leadListItemSchema = z.object({
   assigned_sdr_id: z.string().uuid().nullable().optional(),
   assigned_by: z.string().uuid().nullable().optional(),
   assigned_at: z.string().nullable().optional(),
+  speed_to_lead_at: z.string().nullable().optional(),
 });
 export type LeadListItem = z.infer<typeof leadListItemSchema>;
 

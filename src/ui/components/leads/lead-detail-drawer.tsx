@@ -30,6 +30,7 @@ import {
   type MessageBlock,
   type MessageInline,
 } from "@/lib/message-body";
+import { speedToLeadKeys } from "@/lib/speed-to-lead";
 import { mutationErrorMessage } from "@/lib/tables";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/components/ui/button";
@@ -555,6 +556,7 @@ function LeadStatusField({ leadId, status }: { leadId: string; status: LeadStatu
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
       await queryClient.invalidateQueries({ queryKey: leadKeys.all });
+      await queryClient.invalidateQueries({ queryKey: speedToLeadKeys.all });
     },
   });
   const error = mutationErrorMessage(save.error, save.isError ? "Failed to update status" : "");
@@ -608,6 +610,7 @@ function LeadNotesSection({ leadId, notes }: { leadId: string; notes: string | n
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
       await queryClient.invalidateQueries({ queryKey: leadKeys.all });
+      await queryClient.invalidateQueries({ queryKey: speedToLeadKeys.all });
     },
   });
   const dirty = draft !== saved;

@@ -1,5 +1,6 @@
 import { useState, type ComponentProps } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 
 import { NavUser } from "@/ui/components/nav-user";
 import {
@@ -10,15 +11,22 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/ui/components/ui/sidebar";
-import { canAssignLeads, canInvite, canManageSmartlead } from "@/lib/roles";
+import { canAccessSpeedToLead, canAssignLeads, canInvite, canManageSmartlead } from "@/lib/roles";
+import {
+  listSpeedToLeadEvents,
+  SPEED_TO_LEAD_POLL_IDLE_MS,
+  speedToLeadKeys,
+} from "@/lib/speed-to-lead";
 import { useAuth } from "@/providers/auth-context";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   AlphabetGreekIcon,
   DashboardSquare01Icon,
+  FlashIcon,
   GridTableIcon,
   Mail01Icon,
   UserAdd01Icon,
@@ -34,11 +42,24 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 
   const email = claims?.email ?? "";
   const name = email.split("@")[0] || "Account";
+  const showSpeedToLead = canAccessSpeedToLead(role);
+
+  const unhandledQuery = useQuery({
+    queryKey: speedToLeadKeys.unhandledCount,
+    queryFn: ({ signal }) =>
+      listSpeedToLeadEvents({ limit: 1, offset: 0, includeHandled: false, signal }),
+    enabled: showSpeedToLead,
+    refetchInterval: SPEED_TO_LEAD_POLL_IDLE_MS,
+  });
+  const unhandledCount = unhandledQuery.data?.total ?? 0;
 
   const navItems = [
     { title: "Dashboard", url: "/dashboard", icon: DashboardSquare01Icon },
     { title: "Tables", url: "/tables", icon: GridTableIcon },
     { title: "Leads", url: "/leads", icon: UserGroupIcon },
+    ...(showSpeedToLead
+      ? [{ title: "Speed to lead", url: "/speed-to-lead", icon: FlashIcon }]
+      : []),
     ...(canAssignLeads(role)
       ? [{ title: "Assign leads", url: "/assign-leads", icon: UserCheck01Icon }]
       : []),
@@ -85,11 +106,19 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   <SidebarMenuButton
                     tooltip={item.title}
                     isActive={location.pathname.startsWith(item.url)}
+                    className={
+                      item.url === "/speed-to-lead" && unhandledCount > 0 ? "pr-8" : undefined
+                    }
                     render={<Link to={item.url} />}
                   >
                     <HugeiconsIcon icon={item.icon} strokeWidth={2} />
                     <span>{item.title}</span>
                   </SidebarMenuButton>
+                  {item.url === "/speed-to-lead" && unhandledCount > 0 ? (
+                    <SidebarMenuBadge>
+                      {unhandledCount > 99 ? "99+" : unhandledCount}
+                    </SidebarMenuBadge>
+                  ) : null}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
