@@ -7,8 +7,6 @@ import {
   formatPropertyValue,
   getLead,
   hrefFromUrl,
-  LEAD_STATUSES,
-  LEAD_STATUS_LABELS,
   leadDisplayName,
   leadKeys,
   leadPhone,
@@ -22,7 +20,6 @@ import {
   type LeadListItem,
   type LeadReply,
   type LeadSource,
-  type LeadStatus,
 } from "@/lib/leads";
 import {
   omitLeadingSubject,
@@ -42,13 +39,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/ui/components/ui/drawer";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/ui/components/ui/select";
+import { LeadStatusField } from "@/ui/components/leads/lead-status-field";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import {
   Tooltip,
@@ -76,13 +67,20 @@ type LeadDetailDrawerProps = {
   onOpenChange: (open: boolean) => void;
   leadId: string | null;
   summary?: LeadListItem | null;
+  enrichedPhoneOnly?: boolean;
 };
 
 type ThreadMessage = LeadReply & {
   conversation: LeadConversation;
 };
 
-export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDetailDrawerProps) {
+export function LeadDetailDrawer({
+  open,
+  onOpenChange,
+  leadId,
+  summary,
+  enrichedPhoneOnly = false,
+}: LeadDetailDrawerProps) {
   const [threadExpanded, setThreadExpanded] = useState(false);
   const detailQuery = useQuery({
     queryKey: leadKeys.detail(leadId ?? ""),
@@ -98,7 +96,15 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
   const websiteHref = hrefFromUrl(headerLead?.website) ?? hrefFromUrl(headerLead?.company_url);
   const companyName = headerLead?.company_name?.trim() || "";
   const location = headerLead?.location?.trim() || "";
-  const phone = headerLead ? leadPhone(headerLead) : null;
+  const phone = (() => {
+    if (!headerLead) {
+      return null;
+    }
+    if (enrichedPhoneOnly) {
+      return headerLead.enriched_phone_number?.trim() || null;
+    }
+    return leadPhone(headerLead);
+  })();
   const campaignName =
     (lead ? leadSourceCampaignLabel(lead) : null) ??
     (summary?.id === leadId ? leadSourceCampaignLabel(summary) : null);
@@ -221,7 +227,7 @@ export function LeadDetailDrawer({ open, onOpenChange, leadId, summary }: LeadDe
                     <IconField icon={Mail01Icon} label="Email" value={lead.email} />
                     <IconField icon={Call02Icon} label="Phone" value={phone} />
                   </dl>
-                  <LeadStatusField leadId={lead.id} status={lead.status ?? "new"} />
+                  <LeadStatusField key={lead.id} leadId={lead.id} status={lead.status ?? "new"} />
                 </div>
                 <PropertySection
                   label="Custom properties"
@@ -546,50 +552,6 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
       <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</h3>
       {children}
     </section>
-  );
-}
-
-function LeadStatusField({ leadId, status }: { leadId: string; status: LeadStatus }) {
-  const queryClient = useQueryClient();
-  const save = useMutation({
-    mutationFn: (next: LeadStatus) => updateLead(leadId, { status: next }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
-      await queryClient.invalidateQueries({ queryKey: leadKeys.all });
-      await queryClient.invalidateQueries({ queryKey: speedToLeadKeys.all });
-    },
-  });
-  const error = mutationErrorMessage(save.error, save.isError ? "Failed to update status" : "");
-
-  return (
-    <Section label="Status">
-      <div>
-        <label htmlFor="lead-detail-status" className="sr-only">
-          Lead status
-        </label>
-        <Select
-          value={status}
-          disabled={save.isPending}
-          onValueChange={(value) => {
-            if (value) {
-              save.mutate(value);
-            }
-          }}
-        >
-          <SelectTrigger id="lead-detail-status" size="lg" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {LEAD_STATUSES.map((value) => (
-              <SelectItem key={value} value={value}>
-                {LEAD_STATUS_LABELS[value]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-    </Section>
   );
 }
 

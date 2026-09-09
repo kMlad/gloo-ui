@@ -180,6 +180,7 @@ export function SpeedToLeadPage() {
         }}
         leadId={selectedLead?.id ?? null}
         summary={selectedLead}
+        enrichedPhoneOnly
       />
     </div>
   );

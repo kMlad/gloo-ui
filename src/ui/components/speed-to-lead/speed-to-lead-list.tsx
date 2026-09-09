@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
-import {
-  hrefFromUrl,
-  LEAD_PLATFORM_LABELS,
-  leadDisplayName,
-  leadPhone,
-  type LeadListItem,
-} from "@/lib/leads";
+import { hrefFromUrl, LEAD_PLATFORM_LABELS, leadDisplayName, type LeadListItem } from "@/lib/leads";
 import { phoneEnrichmentIsActive } from "@/lib/phone-enrichments";
 import { formatTableDate } from "@/lib/tables";
 import { formatTimeSince, type SpeedToLeadEventItem } from "@/lib/speed-to-lead";
@@ -94,7 +88,7 @@ function CompanyCell({ lead }: { lead: LeadListItem }) {
 }
 
 function PhoneCell({ event }: { event: SpeedToLeadEventItem }) {
-  const phone = leadPhone(event.lead);
+  const phone = event.lead.enriched_phone_number?.trim() || null;
   const enrichment = event.enrichment ?? null;
   const enriching = enrichment ? phoneEnrichmentIsActive(enrichment.status) : false;
   const [copied, setCopied] = useState(false);
