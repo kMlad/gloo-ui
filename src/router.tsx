@@ -6,11 +6,13 @@ import { AppLayout } from "./ui/layouts/app-layout";
 import { InviteLayout } from "./ui/layouts/invite-layout";
 import { SmartleadLayout } from "./ui/layouts/smartlead-layout";
 import { AssignLeadsLayout } from "./ui/layouts/assign-leads-layout";
+import { SdrsLayout } from "./ui/layouts/sdrs-layout";
 import { DashboardPage } from "./ui/pages/dashboard-page";
 import { LoginPage } from "./ui/pages/login-page";
 import { ForgotPasswordPage } from "./ui/pages/forgot-password-page";
 import { UpdatePasswordPage } from "./ui/pages/update-password-page";
 import { InviteUserPage } from "./ui/pages/invite-user-page";
+import { SdrsPage } from "./ui/pages/sdrs-page";
 import { TablesPage } from "./ui/pages/tables-page";
 import { TableDetailPage } from "./ui/pages/table-detail-page";
 import { LeadsPage } from "./ui/pages/leads-page";
@@ -79,6 +81,15 @@ export const router = createBrowserRouter([
                   {
                     path: "/assign-leads",
                     Component: AssignLeadsPage,
+                  },
+                ],
+              },
+              {
+                Component: SdrsLayout,
+                children: [
+                  {
+                    path: "/sdrs",
+                    Component: SdrsPage,
                   },
                 ],
               },

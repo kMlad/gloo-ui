@@ -46,6 +46,10 @@ export function canAssignLeads(role: AppRole | null | undefined): boolean {
   return role === "admin" || role === "sales_lead";
 }
 
+export function canManageSdrs(role: AppRole | null | undefined): boolean {
+  return role === "admin" || role === "sales_lead";
+}
+
 export function canImportLeads(role: AppRole | null | undefined): boolean {
   return role === "admin" || role === "sales_lead" || role === "sdr";
 }

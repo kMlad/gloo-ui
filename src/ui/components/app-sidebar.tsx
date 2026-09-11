@@ -15,7 +15,13 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/ui/components/ui/sidebar";
-import { canAccessSpeedToLead, canAssignLeads, canInvite, canManageSmartlead } from "@/lib/roles";
+import {
+  canAccessSpeedToLead,
+  canAssignLeads,
+  canInvite,
+  canManageSdrs,
+  canManageSmartlead,
+} from "@/lib/roles";
 import {
   listSpeedToLeadEvents,
   SPEED_TO_LEAD_POLL_IDLE_MS,
@@ -29,6 +35,7 @@ import {
   FlashIcon,
   GridTableIcon,
   Mail01Icon,
+  Clock01Icon,
   UserAdd01Icon,
   UserCheck01Icon,
   UserGroupIcon,
@@ -63,6 +70,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     ...(canAssignLeads(role)
       ? [{ title: "Assign leads", url: "/assign-leads", icon: UserCheck01Icon }]
       : []),
+    ...(canManageSdrs(role) ? [{ title: "SDRs", url: "/sdrs", icon: Clock01Icon }] : []),
     ...(canManageSmartlead(role)
       ? [{ title: "Campaigns", url: "/campaigns", icon: Mail01Icon }]
       : []),
