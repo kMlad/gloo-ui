@@ -23,6 +23,7 @@ import { listSdrs, sdrKeys } from "@/lib/sdrs";
 import { mutationErrorMessage } from "@/lib/tables";
 import { AssignLeadsDialog } from "@/ui/components/leads/assign-leads-dialog";
 import { LeadDetailDrawer } from "@/ui/components/leads/lead-detail-drawer";
+import { LeadLocationFilter } from "@/ui/components/leads/lead-location-filter";
 import { LeadsList } from "@/ui/components/leads/leads-list";
 import { Button } from "@/ui/components/ui/button";
 import {
@@ -83,6 +84,7 @@ export function AssignLeadsPage() {
   const [status, setStatus] = useState<LeadStatus | null>(null);
   const [campaignId, setCampaignId] = useState<number | null>(null);
   const [heyreachCampaignId, setHeyreachCampaignId] = useState<number | null>(null);
+  const [locations, setLocations] = useState<string[]>([]);
   const [selectedLead, setSelectedLead] = useState<LeadListItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [allMatching, setAllMatching] = useState(false);
@@ -99,8 +101,9 @@ export function AssignLeadsPage() {
       campaignId,
       heyreachCampaignId,
       assignmentStatus: "unassigned" as const,
+      locations,
     }),
-    [offset, replyType, status, platform, campaignId, heyreachCampaignId],
+    [offset, replyType, status, platform, campaignId, heyreachCampaignId, locations],
   );
 
   const filterParams = useMemo(
@@ -111,8 +114,9 @@ export function AssignLeadsPage() {
       campaignId,
       heyreachCampaignId,
       assignmentStatus: "unassigned" as const,
+      locations,
     }),
-    [replyType, status, platform, campaignId, heyreachCampaignId],
+    [replyType, status, platform, campaignId, heyreachCampaignId, locations],
   );
 
   const leadsQuery = useQuery({
@@ -239,6 +243,13 @@ export function AssignLeadsPage() {
     setSuccessMessage(null);
   }
 
+  function handleLocationsChange(next: string[]) {
+    setLocations(next);
+    setOffset(0);
+    clearSelection();
+    setSuccessMessage(null);
+  }
+
   function handleToggle(leadId: string, selected: boolean) {
     setSuccessMessage(null);
     if (allMatching) {
@@ -276,7 +287,9 @@ export function AssignLeadsPage() {
     });
   }
 
-  const hasFilters = Boolean(platform || replyType || status || campaignId || heyreachCampaignId);
+  const hasFilters = Boolean(
+    platform || replyType || status || campaignId || heyreachCampaignId || locations.length > 0,
+  );
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6 p-6 md:p-8">
@@ -354,6 +367,16 @@ export function AssignLeadsPage() {
                 ) : null}
               </SelectContent>
             </Select>
+          </div>
+          <div className="w-full sm:w-auto">
+            <label htmlFor="assign-lead-location" className="sr-only">
+              Filter by location
+            </label>
+            <LeadLocationFilter
+              id="assign-lead-location"
+              value={locations}
+              onChange={handleLocationsChange}
+            />
           </div>
           <div className="w-full sm:w-auto">
             <label htmlFor="assign-lead-status" className="sr-only">
@@ -445,7 +468,7 @@ export function AssignLeadsPage() {
           </p>
           <p className="text-sm text-muted-foreground">
             {hasFilters
-              ? "Try another platform, campaign, status, or reply type."
+              ? "Try another platform, campaign, location, status, or reply type."
               : "Imported leads that still need an SDR will show up here."}
           </p>
         </div>

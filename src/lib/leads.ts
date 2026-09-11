@@ -174,6 +174,22 @@ export type LeadDetailResponse = z.infer<typeof leadDetailResponseSchema>;
 export const LEAD_PAGE_SIZE = 50;
 export const LEAD_ID_PAGE_SIZE = 100;
 export const LEAD_ASSIGN_CHUNK_SIZE = 100;
+export const LEAD_LOCATION_PAGE_SIZE = 100;
+export const MAX_LOCATION_FILTERS = 100;
+
+export const leadLocationOptionSchema = z.object({
+  location: z.string(),
+  lead_count: z.number().int(),
+});
+export type LeadLocationOption = z.infer<typeof leadLocationOptionSchema>;
+
+export const leadLocationListResponseSchema = z.object({
+  items: z.array(leadLocationOptionSchema),
+  total: z.number().int(),
+  limit: z.number().int(),
+  offset: z.number().int(),
+});
+export type LeadLocationListResponse = z.infer<typeof leadLocationListResponseSchema>;
 
 export type ListLeadsParams = {
   limit?: number;
@@ -184,6 +200,7 @@ export type ListLeadsParams = {
   campaignId?: number | null;
   heyreachCampaignId?: number | null;
   assignmentStatus?: AssignmentStatus | null;
+  locations?: string[] | null;
   signal?: AbortSignal;
 };
 
@@ -196,6 +213,19 @@ export type LeadListQueryParams = {
   campaignId: number | null;
   heyreachCampaignId: number | null;
   assignmentStatus: AssignmentStatus | null;
+  locations: string[];
+};
+
+export type ListLeadLocationsParams = {
+  q?: string | null;
+  limit?: number;
+  offset?: number;
+  signal?: AbortSignal;
+};
+
+export type LeadLocationQueryParams = {
+  q: string;
+  limit: number;
 };
 
 export type LeadUpdate = {
@@ -311,6 +341,7 @@ export function importLeadsCsv(file: File, mapping: LeadCsvMappingPayload) {
 export const leadKeys = {
   all: ["leads"] as const,
   list: (params: LeadListQueryParams) => ["leads", "list", params] as const,
+  locations: (params: LeadLocationQueryParams) => ["leads", "locations", params] as const,
   detail: (leadId: string) => ["leads", leadId] as const,
 };
 
@@ -340,8 +371,34 @@ export function listLeads(params: ListLeadsParams = {}) {
   if (params.assignmentStatus) {
     search.set("assignment_status", params.assignmentStatus);
   }
+  if (params.locations) {
+    for (const location of params.locations.slice(0, MAX_LOCATION_FILTERS)) {
+      const trimmed = location.trim();
+      if (trimmed) {
+        search.append("locations", trimmed);
+      }
+    }
+  }
   const query = search.toString();
   return apiFetch<LeadListResponse>(`/leads${query ? `?${query}` : ""}`, {
+    signal: params.signal,
+  });
+}
+
+export function listLeadLocations(params: ListLeadLocationsParams = {}) {
+  const search = new URLSearchParams();
+  const query = params.q?.trim();
+  if (query) {
+    search.set("q", query);
+  }
+  if (params.limit !== undefined) {
+    search.set("limit", String(params.limit));
+  }
+  if (params.offset !== undefined) {
+    search.set("offset", String(params.offset));
+  }
+  const qs = search.toString();
+  return apiFetch<LeadLocationListResponse>(`/leads/locations${qs ? `?${qs}` : ""}`, {
     signal: params.signal,
   });
 }

@@ -20,6 +20,7 @@ import { mutationErrorMessage } from "@/lib/tables";
 import { useAuth } from "@/providers/auth-context";
 import { LeadDetailDrawer } from "@/ui/components/leads/lead-detail-drawer";
 import { ImportLeadsCsvDialog } from "@/ui/components/leads/import-leads-csv-dialog";
+import { LeadLocationFilter } from "@/ui/components/leads/lead-location-filter";
 import { LeadsList } from "@/ui/components/leads/leads-list";
 import { Button } from "@/ui/components/ui/button";
 import {
@@ -39,6 +40,7 @@ export function LeadsPage() {
   const [platform, setPlatform] = useState<LeadPlatform | null>(null);
   const [replyType, setReplyType] = useState<ReplyType | null>(null);
   const [status, setStatus] = useState<LeadStatus | null>(null);
+  const [locations, setLocations] = useState<string[]>([]);
   const [selectedLead, setSelectedLead] = useState<LeadListItem | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const showAssignee = canAssignLeads(role);
@@ -54,8 +56,9 @@ export function LeadsPage() {
       campaignId: null,
       heyreachCampaignId: null,
       assignmentStatus: null,
+      locations,
     }),
-    [offset, replyType, status, platform],
+    [offset, replyType, status, platform, locations],
   );
 
   const leadsQuery = useQuery({
@@ -98,7 +101,12 @@ export function LeadsPage() {
     setOffset(0);
   }
 
-  const hasFilters = Boolean(platform || replyType || status);
+  function handleLocationsChange(next: string[]) {
+    setLocations(next);
+    setOffset(0);
+  }
+
+  const hasFilters = Boolean(platform || replyType || status || locations.length > 0);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6 p-6 md:p-8">
@@ -134,6 +142,16 @@ export function LeadsPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="w-full sm:w-auto">
+            <label htmlFor="lead-location" className="sr-only">
+              Filter by location
+            </label>
+            <LeadLocationFilter
+              id="lead-location"
+              value={locations}
+              onChange={handleLocationsChange}
+            />
           </div>
           <div className="w-full sm:w-auto">
             <label htmlFor="lead-status" className="sr-only">
@@ -186,7 +204,7 @@ export function LeadsPage() {
           </p>
           <p className="text-sm text-muted-foreground">
             {hasFilters
-              ? "Try another platform, status, or reply type, or import more leads."
+              ? "Try another platform, location, status, or reply type, or import more leads."
               : "Import a CSV or bring in SmartLead or HeyReach replies to get started."}
           </p>
           {showImport && !hasFilters ? (
