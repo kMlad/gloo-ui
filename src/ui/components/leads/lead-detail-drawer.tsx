@@ -211,18 +211,13 @@ export function LeadDetailDrawer({
             >
               <div
                 className={cn(
-                  "flex flex-col gap-4 px-4 pt-4 pb-3",
+                  "flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-4 pb-3",
                   threadExpanded
-                    ? "min-h-0 max-h-[38%] shrink-0 overflow-y-auto overscroll-contain border-b border-border/70 md:max-h-none md:w-80 md:shrink-0 md:self-stretch md:border-r md:border-b-0"
-                    : "shrink-0",
+                    ? "max-h-[38%] shrink-0 border-b border-border/70 md:max-h-none md:w-80 md:self-stretch md:border-r md:border-b-0"
+                    : "max-h-[50%]",
                 )}
               >
-                <div
-                  className={cn(
-                    "flex flex-col gap-4",
-                    threadExpanded && "sticky top-0 z-10 bg-popover/95 pb-1 backdrop-blur-sm",
-                  )}
-                >
+                <div className="sticky top-0 z-10 flex flex-col gap-4 bg-popover/95 pb-1 backdrop-blur-sm">
                   <dl className="flex flex-col gap-2">
                     <IconField icon={Mail01Icon} label="Email" value={lead.email} />
                     <IconField icon={Call02Icon} label="Phone" value={phone} />
@@ -278,7 +273,7 @@ function ConversationThread({
   return (
     <section
       className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col",
+        "flex min-h-[min(16rem,45%)] min-w-0 flex-1 flex-col",
         expanded ? "md:border-t-0" : "border-t border-border/70",
       )}
     >
